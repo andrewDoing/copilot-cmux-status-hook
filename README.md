@@ -49,6 +49,15 @@ Set environment variables before starting Copilot CLI:
 | `CMUX_COPILOT_CONTEXT_PROGRESS` | `1` | Set to `0` to keep the progress bar for working/done state instead of context usage. |
 | `CMUX_COPILOT_WORKSPACE_CARD` | `1` | Set to `0` to avoid updating the visible CMUX workspace card description/color. |
 | `CMUX_COPILOT_WORKSPACE_TITLE` | `1` | Set to `0` to avoid prefixing the workspace title with status emoji. |
+| `CMUX_COPILOT_DEDUPE_SIDEBAR` | `1` | Set to `0` to stop de-duping card details against CMUX sidebar status entries. |
+| `CMUX_COPILOT_SHOW_AIC` | `1` | Set to `0` to hide the `💳 AIC used` card line. |
+| `CMUX_COPILOT_SHOW_COMPACTIONS` | `1` | Set to `0` to hide compaction card lines. |
+| `CMUX_COPILOT_SHOW_CONTEXT` | `1` | Set to `0` to hide context card lines; the progress bar can still show context when enabled. |
+| `CMUX_COPILOT_SHOW_ELAPSED` | `1` | Set to `0` to hide elapsed-time card lines. |
+| `CMUX_COPILOT_SHOW_PERMISSIONS` | `1` | Set to `0` to hide permission detail card lines; the red approval status still appears. |
+| `CMUX_COPILOT_SHOW_SKILLS` | `1` | Set to `0` to hide invoked skill card lines. |
+| `CMUX_COPILOT_SHOW_SUBAGENTS` | `1` | Set to `0` to hide subagent card lines. |
+| `CMUX_COPILOT_SHOW_TOOL_ACTIVITY` | `1` | Set to `0` to hide `🛠 Tools invoked` card lines. |
 | `CMUX_COPILOT_CONTEXT_WARNING_TOKENS` | `100000` | Token count that turns context status yellow. |
 | `CMUX_COPILOT_CONTEXT_CRITICAL_RATIO` | `0.5` | Context window ratio that turns context status red. |
 | `CMUX_COPILOT_ELAPSED_MS` | `15000` | Interval for refreshing elapsed working time on the card. |
