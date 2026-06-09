@@ -111,11 +111,11 @@ test("uses the progress bar for context usage after usage info is available", as
       "--action",
       "set-description",
       "--description",
-      "🟢 Context 21% (42k/200k, 25 msgs)",
+      "",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "✅ Done"],
-    ["cmux", "notify", "--title", "Copilot is done", "--body", "🟢 Context 21% (42k/200k, 25 msgs)"],
+    ["cmux", "notify", "--title", "Copilot is done", "--body", "✅ Done"],
   ]);
 });
 
@@ -134,7 +134,7 @@ test("labels context progress as working while the agent is active", async () =>
       "--action",
       "set-description",
       "--description",
-      "🟢 Context 34% (93.6k/272k, 121 msgs)",
+      "",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
   ]);
@@ -226,14 +226,14 @@ test("marks context yellow at 100k tokens and red at 50 percent", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.contextUsage({ currentTokens: 100_000, tokenLimit: 272_000, messagesLength: 10 });
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🟡 Context 37% (100k/272k, 10 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
 
   calls.length = 0;
   await controller.contextUsage({ currentTokens: 136_000, tokenLimit: 272_000, messagesLength: 11 });
   await controller.startWorking("thinking");
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking --icon gear --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🔴 Context 50% (136k/272k, 11 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
 });
 
 test("makes permission requests obvious", async () => {
@@ -346,6 +346,17 @@ test("tracks invoked skill names without changing done status", async () => {
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux, worktree-arena"));
 });
 
+test("tracks injected skill context when skill invoked events are absent", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.userPrompt("prompt received");
+  calls.length = 0;
+  await controller.skillContextMessage('<skill-context name="cmux">loaded</skill-context>');
+
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux"));
+  assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- skill invoked: cmux (context-load)"));
+});
+
 test("tracks running AIC usage total without changing done status", async () => {
   const { controller, calls } = createRecorder();
 
@@ -368,7 +379,7 @@ test("tracks compaction count without changing done status", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.compactionStarted({ conversationTokens: 180_000 });
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧹 Compacting context"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
   assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- compaction started at 180k conversation tokens"));
 
   calls.length = 0;

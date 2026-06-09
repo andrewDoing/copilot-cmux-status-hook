@@ -51,7 +51,7 @@ test("e2e event flow shows immediate working state, context usage, tool activity
     messagesLength: 88,
   });
   await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1, model: "gpt-5.5" });
-  await session.emit("skill.invoked", { name: "cmux", trigger: "agent-invoked" });
+  await session.emit("system.message", { content: '<skill-context name="cmux">loaded</skill-context>' });
   await session.emit("assistant.turn_start", { turnId: "7" });
   await session.emit("session.compaction_start", { conversationTokens: 150_000 });
   await session.emit("session.compaction_complete", { success: true, tokensRemoved: 55_000 });
@@ -62,12 +62,12 @@ test("e2e event flow shows immediate working state, context usage, tool activity
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 prompt received --icon gear --color #B26A00"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.25 --label 🤖 Context 25% (68k/272k, 88 msgs)"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🟢 Context 25% (68k/272k, 88 msgs)\n💳 AIC used: 1"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux\n🟢 Context 25% (68k/272k, 88 msgs)\n💳 AIC used: 1"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux\n💳 AIC used: 1"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- compaction complete: 1 compaction, 55k tokens removed"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- bash finished"));
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 1\n🧰 Skills: cmux\n🟢 Context 25% (68k/272k, 88 msgs)\n💳 AIC used: 1\n🧹 Compactions: 1"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 1\n🧰 Skills: cmux\n💳 AIC used: 1\n🧹 Compactions: 1"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.25 --label ✅ Context 25% (68k/272k, 88 msgs)"));
 });
 
