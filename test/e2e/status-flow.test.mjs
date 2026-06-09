@@ -82,6 +82,16 @@ test("e2e error flow marks the sidebar as needing attention", async () => {
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot needs attention --body model failed"));
 });
 
+test("e2e turn start does not duplicate thinking text in progress", async () => {
+  const { calls, session } = createHarness();
+
+  await session.emit("assistant.turn_start", { turnId: "6" });
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking turn 6 --icon gear --color #B26A00"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.12"));
+  assert(!calls.some((call) => call[1] === "set-progress" && String(call[4] || "").includes("thinking turn 6")));
+});
+
 test("e2e goal mode flow shows the objective on the workspace card only", async () => {
   const { calls, hooks, session } = createHarness();
 

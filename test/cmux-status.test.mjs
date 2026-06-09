@@ -167,7 +167,7 @@ test("marks the agent as working with status, progress, and log", async () => {
       "--color",
       "#B26A00",
     ],
-    ["cmux", "set-progress", "0.12", "--label", "🤖 thinking"],
+    ["cmux", "set-progress", "0.12"],
     ["cmux", "workspace-action", "--action", "clear-description"],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
     ["cmux", "log", "--level", "info", "--source", "copilot-cmux-status", "--", "🤖 thinking"],
@@ -182,7 +182,7 @@ test("marks the agent as done and clears progress", async () => {
   await controller.done();
 
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => callLine(call) === "cmux set-progress 1.00 --label ✅ Done"));
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 1.00"));
   assert(!calls.some((call) => callLine(call) === "cmux workspace-action --action set-description --description "));
   assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "clear-description"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Green"));
@@ -318,7 +318,7 @@ test("makes permission requests obvious", async () => {
   });
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🚨 APPROVAL NEEDED: shell command npm test -- --watch --icon exclamationmark.triangle --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux set-progress 1.00 --label 🚨 APPROVAL NEEDED: shell command npm test -- --watch"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 1.00"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot needs approval --body 🚨 APPROVAL NEEDED: shell command npm test -- --watch"));
 });
 
