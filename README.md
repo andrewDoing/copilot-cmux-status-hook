@@ -6,6 +6,7 @@ This Copilot CLI extension listens to session hooks and events, then mirrors the
 
 - **Working:** `🤖` status/card/title, visible workspace card description/color, log entry, elapsed timer, and a pulsing progress bar until context usage is known.
 - **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count. Context is marked `🟡` at 100k tokens and `🔴` at 50% of the window.
+- **Skills:** tracks `skill.invoked`, shows invoked skill names on the workspace card, and includes the skill count in done summaries.
 - **Compactions:** tracks `session.compaction_start`/`session.compaction_complete`, shows `🧹` compaction count on the workspace card, and includes the count in done summaries.
 - **Done:** `✅` green sidebar status/card/title, last-turn summary, log entry, and desktop notification with the actual status summary.
 - **Needs attention:** `🔴`/`🚨` red sidebar status/card/title, persistent failure or approval state, error log entry, and desktop notification.

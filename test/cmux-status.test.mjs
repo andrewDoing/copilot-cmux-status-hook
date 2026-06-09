@@ -326,6 +326,25 @@ test("does not duplicate completed tool summary in workspace description", async
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
 });
 
+test("tracks invoked skill names and includes skill count in done summary", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.userPrompt("prompt received");
+  calls.length = 0;
+  await controller.skillInvoked({ name: "cmux", trigger: "agent-invoked" });
+  await controller.skillInvoked({ name: "worktree-arena", trigger: "user-invoked" });
+
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux, worktree-arena"));
+  assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- skill invoked: cmux (agent-invoked)"));
+
+  calls.length = 0;
+  await controller.done();
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 2 skills --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux, worktree-arena"));
+});
+
 test("tracks compaction count and includes it in done summary", async () => {
   const { controller, calls } = createRecorder();
 
