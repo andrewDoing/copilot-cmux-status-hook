@@ -115,7 +115,7 @@ test("uses the progress bar for context usage after usage info is available", as
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "✅ Done"],
-    ["cmux", "notify", "--title", "Copilot is done", "--body", "✅ Done"],
+    ["cmux", "notify", "--title", "Copilot is done", "--body", "🟢 Context 21% (42k/200k, 25 msgs)"],
   ]);
 });
 
@@ -173,7 +173,7 @@ test("marks failed tools as attention-grabbing while the agent keeps working", a
       "--action",
       "set-description",
       "--description",
-      "",
+      "🛠 Tools invoked: 1",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Red"],
   ]);
@@ -309,7 +309,8 @@ test("tracks subagents and summarizes completion", async () => {
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 1 subagent --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🤖 Subagents completed: 1"));
 });
 
 test("does not duplicate completed tool summary in workspace description", async () => {
@@ -322,11 +323,11 @@ test("does not duplicate completed tool summary in workspace description", async
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 2 tools --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 2"));
 });
 
-test("tracks invoked skill names and includes skill count in done summary", async () => {
+test("tracks invoked skill names without changing done status", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.userPrompt("prompt received");
@@ -341,11 +342,29 @@ test("tracks invoked skill names and includes skill count in done summary", asyn
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 2 skills --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux, worktree-arena"));
 });
 
-test("tracks compaction count and includes it in done summary", async () => {
+test("tracks running AIC usage total without changing done status", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.assistantUsage({ apiCallId: "call-1", cost: 1, model: "gpt-5.5" });
+  await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
+  await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
+
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1.5"));
+  assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- AIC used: 1.5 (+0.5 gpt-5-mini)"));
+
+  calls.length = 0;
+  await controller.done();
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1.5"));
+});
+
+test("tracks compaction count without changing done status", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.compactionStarted({ conversationTokens: 180_000 });
@@ -357,9 +376,9 @@ test("tracks compaction count and includes it in done summary", async () => {
   await controller.done();
 
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- compaction complete: 1 compaction, 75k tokens removed"));
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 1 compaction --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧹 Compactions: 1"));
-  assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot is done --body ✅ Done: 1 compaction"));
+  assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot is done --body 🧹 Compactions: 1"));
 });
 
 test("marks failed compactions as needing attention", async () => {

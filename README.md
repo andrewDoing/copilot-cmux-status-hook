@@ -6,9 +6,11 @@ This Copilot CLI extension listens to session hooks and events, then mirrors the
 
 - **Working:** `🤖` status/card/title, visible workspace card description/color, log entry, elapsed timer, and a pulsing progress bar until context usage is known.
 - **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count. Context is marked `🟡` at 100k tokens and `🔴` at 50% of the window.
-- **Skills:** tracks `skill.invoked`, shows invoked skill names on the workspace card, and includes the skill count in done summaries.
-- **Compactions:** tracks `session.compaction_start`/`session.compaction_complete`, shows `🧹` compaction count on the workspace card, and includes the count in done summaries.
-- **Done:** `✅` green sidebar status/card/title, last-turn summary, log entry, and desktop notification with the actual status summary.
+- **Tool activity:** keeps the primary done status simple while showing `🛠 Tools invoked: N` on the workspace card.
+- **AIC usage:** tracks `assistant.usage` billing cost and shows a running `💳 AIC used: N` total on the workspace card.
+- **Skills:** tracks `skill.invoked` and shows invoked skill names on the workspace card.
+- **Compactions:** tracks `session.compaction_start`/`session.compaction_complete` and shows `🧹` compaction count on the workspace card.
+- **Done:** `✅` green sidebar status/card/title, supplemental card details, log entry, and desktop notification with the visible card details when present.
 - **Needs attention:** `🔴`/`🚨` red sidebar status/card/title, persistent failure or approval state, error log entry, and desktop notification.
 
 The extension is inert outside CMUX. If `CMUX_WORKSPACE_ID` is not set, it does nothing.
