@@ -32,7 +32,7 @@ test("does not call cmux outside CMUX", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("marks the agent as working with status, progress, log, and flash", async () => {
+test("marks the agent as working with status, progress, and log", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.startWorking("thinking");
@@ -50,7 +50,6 @@ test("marks the agent as working with status, progress, log, and flash", async (
     ],
     ["cmux", "set-progress", "0.12", "--label", "Copilot working: thinking"],
     ["cmux", "log", "--level", "info", "--source", "copilot-cmux-status", "--", "Copilot working: thinking"],
-    ["cmux", "trigger-flash"],
   ]);
 });
 
@@ -74,7 +73,6 @@ test("marks the agent as done and clears progress", async () => {
       "#196F3D",
     ],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
-    ["cmux", "trigger-flash"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
     ["cmux", "clear-progress"],
   ]);
@@ -85,7 +83,7 @@ test("uses the progress bar for context usage after usage info is available", as
 
   await controller.contextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 });
   await controller.startWorking("thinking");
-  assert.deepEqual(calls.at(-3), ["cmux", "set-progress", "0.21", "--label", "Working - Context 21% (42k/200k, 25 msgs)"]);
+  assert.deepEqual(calls.at(-2), ["cmux", "set-progress", "0.21", "--label", "Working - Context 21% (42k/200k, 25 msgs)"]);
   calls.length = 0;
   await controller.done();
 
@@ -102,7 +100,6 @@ test("uses the progress bar for context usage after usage info is available", as
       "#196F3D",
     ],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
-    ["cmux", "trigger-flash"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
   ]);
 });
@@ -146,7 +143,6 @@ test("marks failed tools as attention-grabbing while the agent keeps working", a
       "--color",
       "#B00020",
     ],
-    ["cmux", "trigger-flash"],
   ]);
 });
 
@@ -167,7 +163,7 @@ test("reports cmux command failures once without throwing", async () => {
   await controller.ready();
   await controller.done();
 
-  assert.equal(calls.length, 8);
+  assert.equal(calls.length, 7);
   assert.deepEqual(errors, ["cmux command failed: cmux unavailable"]);
 });
 
