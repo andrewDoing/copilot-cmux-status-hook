@@ -8,7 +8,7 @@ const controller = createCmuxStatusController({
   },
 });
 
-await controller.ready("✅ Ready", { log: false });
+await controller.startupReady("✅ Ready");
 
 const session = await joinSession({
   hooks: createSessionHooks(controller),

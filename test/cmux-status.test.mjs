@@ -151,7 +151,7 @@ test("render plan assigns goal mode to the workspace card only", () => {
   assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux\n💳 AIC used: 2");
 });
 
-test("marks the agent as working with status, progress, and log", async () => {
+test("marks the agent as working without duplicating lifecycle in logs", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.startWorking("thinking");
@@ -170,8 +170,8 @@ test("marks the agent as working with status, progress, and log", async () => {
     ["cmux", "set-progress", "0.12"],
     ["cmux", "workspace-action", "--action", "clear-description"],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
-    ["cmux", "log", "--level", "info", "--source", "copilot-cmux-status", "--", "🤖 thinking"],
   ]);
+  assert(!calls.some((call) => call[1] === "log"));
 });
 
 test("marks the agent as done and clears progress", async () => {
@@ -186,7 +186,7 @@ test("marks the agent as done and clears progress", async () => {
   assert(!calls.some((call) => callLine(call) === "cmux workspace-action --action set-description --description "));
   assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "clear-description"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Green"));
-  assert(calls.some((call) => callLine(call) === "cmux log --level success --source copilot-cmux-status -- ✅ Done"));
+  assert(!calls.some((call) => callLine(call) === "cmux log --level success --source copilot-cmux-status -- ✅ Done"));
   assert(calls.some((call) => callLine(call) === "cmux notify --title Copilot is done --body ✅ Done"));
   assert(calls.some((call) => callLine(call) === "cmux clear-progress"));
 });
@@ -238,6 +238,46 @@ test("can reset ready state without adding duplicate ready logs", async () => {
   assert(!calls.some((call) => call[1] === "log"));
 });
 
+test("startup clears stale CMUX surfaces before writing one ready status", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.startupReady("✅ Ready");
+
+  assert.deepEqual(calls, [
+    ["cmux", "clear-progress"],
+    ["cmux", "clear-status", "copilot-cli"],
+    ["cmux", "clear-status", "copilot"],
+    ["cmux", "workspace-action", "--action", "clear-description"],
+    ["cmux", "clear-log"],
+    ["cmux", "set-status", "copilot-cli", "✅ Ready", "--icon", "checkmark", "--color", "#196F3D"],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
+  ]);
+});
+
+test("can preserve startup logs when clearing logs is disabled", async () => {
+  const { controller, calls } = createRecorder({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_CLEAR_LOG_ON_START: "0",
+  });
+
+  await controller.startupReady("✅ Ready");
+
+  assert(!calls.some((call) => call[1] === "clear-log"));
+});
+
+test("can opt in to lifecycle logs", async () => {
+  const { controller, calls } = createRecorder({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_LOG_LIFECYCLE: "1",
+  });
+
+  await controller.startWorking("thinking");
+  await controller.done();
+
+  assert(calls.some((call) => callLine(call) === "cmux log --level info --source copilot-cmux-status -- 🤖 thinking"));
+  assert(calls.some((call) => callLine(call) === "cmux log --level success --source copilot-cmux-status -- ✅ Done"));
+});
+
 test("marks failed tools as attention-grabbing while the agent keeps working", async () => {
   const { controller, calls } = createRecorder();
 
@@ -270,7 +310,7 @@ test("reports cmux command failures once without throwing", async () => {
   await controller.ready();
   await controller.done();
 
-  assert.equal(calls.length, 9);
+  assert.equal(calls.length, 7);
   assert.deepEqual(errors, ["cmux command failed: cmux unavailable"]);
 });
 
