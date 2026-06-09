@@ -4,7 +4,7 @@ Make GitHub Copilot CLI status obvious in CMUX.
 
 This Copilot CLI extension listens to session hooks and events, then mirrors the agent state into CMUX:
 
-- **Working:** orange sidebar status, log entry, and a pulsing progress bar until context usage is known.
+- **Working:** orange sidebar status, visible workspace card description/color, log entry, and a pulsing progress bar until context usage is known.
 - **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count. While the agent is active, the label is prefixed with `Working -`.
 - **Done:** green sidebar status, log entry, and desktop notification.
 - **Needs attention:** red sidebar status, error log entry, and desktop notification.
@@ -41,6 +41,7 @@ Set environment variables before starting Copilot CLI:
 | `CMUX_COPILOT_NOTIFY_DONE` | `1` | Set to `0` to disable done notifications. |
 | `CMUX_COPILOT_NOTIFY_ERROR` | `1` | Set to `0` to disable error notifications. |
 | `CMUX_COPILOT_CONTEXT_PROGRESS` | `1` | Set to `0` to keep the progress bar for working/done state instead of context usage. |
+| `CMUX_COPILOT_WORKSPACE_CARD` | `1` | Set to `0` to avoid updating the visible CMUX workspace card description/color. |
 | `CMUX_COPILOT_PULSE_MS` | `1200` | Progress pulse interval while the agent works. |
 | `CMUX_COPILOT_CLEAR_PROGRESS_MS` | `4000` | Delay before clearing the completed progress bar when context progress is unavailable or disabled. |
 | `CMUX_COPILOT_LOG_SOURCE` | `copilot-cmux-status` | Source label for CMUX log entries. |

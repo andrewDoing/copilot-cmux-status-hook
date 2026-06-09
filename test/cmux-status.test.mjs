@@ -49,6 +49,8 @@ test("marks the agent as working with status, progress, and log", async () => {
       "#B26A00",
     ],
     ["cmux", "set-progress", "0.12", "--label", "Copilot working: thinking"],
+    ["cmux", "workspace-action", "--action", "set-description", "--description", "Copilot working: thinking"],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
     ["cmux", "log", "--level", "info", "--source", "copilot-cmux-status", "--", "Copilot working: thinking"],
   ]);
 });
@@ -72,6 +74,8 @@ test("marks the agent as done and clears progress", async () => {
       "--color",
       "#196F3D",
     ],
+    ["cmux", "workspace-action", "--action", "set-description", "--description", "Copilot done - waiting"],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
     ["cmux", "clear-progress"],
@@ -83,7 +87,7 @@ test("uses the progress bar for context usage after usage info is available", as
 
   await controller.contextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 });
   await controller.startWorking("thinking");
-  assert.deepEqual(calls.at(-2), ["cmux", "set-progress", "0.21", "--label", "Working - Context 21% (42k/200k, 25 msgs)"]);
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.21 --label Working - Context 21% (42k/200k, 25 msgs)"));
   calls.length = 0;
   await controller.done();
 
@@ -99,6 +103,15 @@ test("uses the progress bar for context usage after usage info is available", as
       "--color",
       "#196F3D",
     ],
+    [
+      "cmux",
+      "workspace-action",
+      "--action",
+      "set-description",
+      "--description",
+      "Copilot done - waiting\nContext 21% (42k/200k, 25 msgs)",
+    ],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
   ]);
@@ -113,6 +126,15 @@ test("labels context progress as working while the agent is active", async () =>
 
   assert.deepEqual(calls, [
     ["cmux", "set-progress", "0.34", "--label", "Working - Context 34% (93.6k/272k, 121 msgs)"],
+    [
+      "cmux",
+      "workspace-action",
+      "--action",
+      "set-description",
+      "--description",
+      "Copilot working\nContext 34% (93.6k/272k, 121 msgs)",
+    ],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
   ]);
 });
 
@@ -143,6 +165,15 @@ test("marks failed tools as attention-grabbing while the agent keeps working", a
       "--color",
       "#B00020",
     ],
+    [
+      "cmux",
+      "workspace-action",
+      "--action",
+      "set-description",
+      "--description",
+      "Copilot working: apply patch failed",
+    ],
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Red"],
   ]);
 });
 
@@ -163,7 +194,7 @@ test("reports cmux command failures once without throwing", async () => {
   await controller.ready();
   await controller.done();
 
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 11);
   assert.deepEqual(errors, ["cmux command failed: cmux unavailable"]);
 });
 
