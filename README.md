@@ -15,7 +15,7 @@ This Copilot CLI extension listens to session hooks and events, then mirrors the
 
 The extension is inert outside CMUX. If `CMUX_WORKSPACE_ID` is not set, it does nothing.
 
-Each CMUX surface has one owner: the status item and title show lifecycle, the progress bar shows context when available, and the workspace card shows supplemental details such as tools, skills, AIC, compactions, permissions, subagents, and elapsed time. If context progress is disabled, the workspace card shows context instead.
+Each CMUX surface has one owner: the status item and title show lifecycle, the progress bar shows context when available, and the workspace card shows supplemental details such as tools, skills, AIC, compactions, permissions, subagents, and elapsed time. If context progress is disabled, the workspace card shows context instead. The hook writes a clean ready state when it starts, builds a render plan for each event, then applies only changed CMUX surfaces so unchanged card/status/progress values are not re-emitted.
 
 ## Install
 

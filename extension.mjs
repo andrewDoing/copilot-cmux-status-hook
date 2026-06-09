@@ -8,6 +8,8 @@ const controller = createCmuxStatusController({
   },
 });
 
+await controller.ready();
+
 const session = await joinSession({
   hooks: createSessionHooks(controller),
   tools: [],
