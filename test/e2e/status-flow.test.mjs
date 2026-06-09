@@ -21,10 +21,10 @@ class FakeSession {
   }
 }
 
-function createHarness() {
+function createHarness(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
   const calls = [];
   const controller = createCmuxStatusController({
-    env: { CMUX_WORKSPACE_ID: "workspace-1" },
+    env,
     elapsedIntervalMs: 0,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
@@ -59,15 +59,13 @@ test("e2e event flow shows immediate working state, context usage, tool activity
   await session.emit("tool.execution_complete", { toolCallId: "tool-1", success: true });
   await session.emit("session.idle", { aborted: false });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 prompt received --icon gear --color #B26A00"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.25 --label 🤖 Context 25% (68k/272k, 88 msgs)"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux\n💳 AIC used: 1"));
+  assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- compaction complete: 1 compaction, 55k tokens removed"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- bash finished"));
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 1\n🧰 Skills: cmux\n💳 AIC used: 1\n🧹 Compactions: 1"));
+  assert(!calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- Background tasks changed"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.25 --label ✅ Context 25% (68k/272k, 88 msgs)"));
 });
 
@@ -77,8 +75,8 @@ test("e2e error flow marks the sidebar as needing attention", async () => {
   await hooks.onUserPromptSubmitted();
   await hooks.onErrorOccurred({ error: "model failed" });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🔴 Needs attention --icon xmark --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot needs attention --body model failed"));
 });
 
@@ -87,13 +85,35 @@ test("e2e turn start does not duplicate thinking text in progress", async () => 
 
   await session.emit("assistant.turn_start", { turnId: "6" });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking turn 6 --icon gear --color #B26A00"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.12"));
   assert(!calls.some((call) => call[1] === "set-progress" && String(call[4] || "").includes("thinking turn 6")));
 });
 
-test("e2e goal mode flow shows the objective on the workspace card only", async () => {
+test("e2e goal mode flow avoids workspace card duplication by default", async () => {
   const { calls, hooks, session } = createHarness();
+
+  await hooks.onUserPromptSubmitted();
+  await session.emit("user.message", {
+    content: [
+      "The user set this explicit autopilot objective with /autopilot:",
+      "",
+      "implement goal mode support",
+      "",
+      "Work autonomously toward this objective in clear checkpoints.",
+    ].join("\n"),
+  });
+
+  assert(!calls.some((call) => call[1] === "workspace-action"));
+  assert(!calls.some((call) => call[1] === "set-status" && String(call[3]).includes("Goal:")));
+  assert(!calls.some((call) => call[1] === "set-progress" && String(call[4]).includes("Goal:")));
+});
+
+test("e2e goal mode can opt in to workspace card details", async () => {
+  const { calls, hooks, session } = createHarness({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_WORKSPACE_CARD: "1",
+  });
 
   await hooks.onUserPromptSubmitted();
   await session.emit("user.message", {
@@ -109,4 +129,17 @@ test("e2e goal mode flow shows the objective on the workspace card only", async 
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🎯 Goal: implement goal mode support"));
   assert(!calls.some((call) => call[1] === "set-status" && String(call[3]).includes("Goal:")));
   assert(!calls.some((call) => call[1] === "set-progress" && String(call[4]).includes("Goal:")));
+});
+
+test("e2e skill context can opt in to workspace card details", async () => {
+  const { calls, session } = createHarness({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_WORKSPACE_CARD: "1",
+  });
+
+  await session.emit("system.message", { content: '<skill-context name="cmux">loaded</skill-context>' });
+
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux"));
+  assert(!calls.some((call) => call[1] === "set-status" && String(call[3]).includes("Skills:")));
+  assert(!calls.some((call) => call[1] === "set-progress" && String(call[4]).includes("Skills:")));
 });

@@ -26,6 +26,10 @@ function createRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
   return { controller, calls, errors };
 }
 
+function createCardRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
+  return createRecorder({ ...env, CMUX_COPILOT_WORKSPACE_CARD: "1" });
+}
+
 function callLine(call) {
   return call.join(" ");
 }
@@ -36,12 +40,20 @@ function workspaceDescriptions(calls) {
     .map((call) => call[5]);
 }
 
+function assertNoLifecycleStatusWrites(calls) {
+  assert(!calls.some((call) => call[1] === "set-status"));
+}
+
+function assertNoWorkspaceDescriptionWrites(calls) {
+  assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "set-description"));
+}
+
 function aicLineCount(text) {
   return String(text || "").split("\n").filter((line) => line.includes("AIC used")).length;
 }
 
 function testConfig(overrides = {}) {
-  return { ...DEFAULTS, elapsedIntervalMs: 0, statusKey: "copilot-cli", workspaceTitle: false, ...overrides };
+  return { ...DEFAULTS, elapsedIntervalMs: 0, statusKey: "copilot-cli", workspaceCard: true, workspaceTitle: false, ...overrides };
 }
 
 test("does not call cmux outside CMUX", async () => {
@@ -54,7 +66,7 @@ test("does not call cmux outside CMUX", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("render plan assigns context to progress and AIC to workspace card", () => {
+test("render plan keeps AIC out of the workspace card", () => {
   const state = {
     activeSubagents: new Map(),
     aiCreditsUsed: 7.5,
@@ -81,10 +93,10 @@ test("render plan assigns context to progress and AIC to workspace card", () => 
 
   const plan = renderPlan(state, testConfig(), "✅ Done");
 
-  assert.equal(plan.status.value, "✅ Done");
+  assert.equal(plan.status, undefined);
   assert.equal(plan.progress.label, "✅ Context 33% (90.3k/272k, 78 msgs)");
-  assert.equal(plan.workspaceDescription, "💳 AIC used: 7.5");
-  assert.equal(aicLineCount(plan.workspaceDescription), 1);
+  assert.equal(plan.workspaceDescription, "");
+  assert.equal(aicLineCount(plan.workspaceDescription), 0);
 });
 
 test("render plan moves context to workspace card when context progress is disabled", () => {
@@ -146,32 +158,90 @@ test("render plan assigns goal mode to the workspace card only", () => {
 
   const plan = renderPlan(state, testConfig(), "🤖 thinking");
 
-  assert.equal(plan.status.value, "🤖 thinking");
+  assert.equal(plan.status, undefined);
   assert.equal(plan.progress.label, "🤖 Context 21% (42k/200k, 25 msgs)");
-  assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux\n💳 AIC used: 2");
+  assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux");
 });
 
-test("marks the agent as working without duplicating lifecycle in logs", async () => {
+test("render plan routes detail kinds through the surface policy", () => {
+  const state = {
+    activeSubagents: new Map([["agent-1", "Reviewer"]]),
+    aiCreditsUsed: 2,
+    attentionActive: false,
+    attentionMessage: "",
+    compactionActive: false,
+    compactionCount: 1,
+    contextUsage: normalizeContextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 }),
+    currentActivity: "thinking",
+    goal: { active: true, title: "implement goal mode support" },
+    permissionActive: false,
+    permissionMessage: "",
+    progress: 0.12,
+    state: "working",
+    turnStartedAt: undefined,
+    turnStats: {
+      toolCount: 2,
+      failedTools: 0,
+      completedSubagents: 1,
+      failedSubagents: 0,
+      skills: new Map([["cmux", 1]]),
+      tools: new Map([["bash", 1], ["view", 1]]),
+    },
+  };
+  const plan = renderPlan(state, testConfig({ contextProgress: false }), "🤖 thinking");
+
+  assert.equal(plan.status, undefined);
+  assert.equal(plan.progress, undefined);
+  assert.equal(plan.workspaceDescription, [
+    "1 subagent running: Reviewer",
+    "🤖 Subagents completed: 1",
+    "🎯 Goal: implement goal mode support",
+    "🧰 Skills: cmux",
+    "🟢 Context 21% (42k/200k, 25 msgs)",
+    "🧹 Compactions: 1",
+  ].join("\n"));
+  assert(!plan.workspaceDescription.includes("AIC used"));
+  assert(!plan.workspaceDescription.includes("Tools invoked"));
+});
+
+test("adds working progress without writing lifecycle status or logs", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.startWorking("thinking");
 
   assert.deepEqual(calls, [
-    [
-      "cmux",
-      "set-status",
-      "copilot-cli",
-      "🤖 thinking",
-      "--icon",
-      "gear",
-      "--color",
-      "#B26A00",
-    ],
     ["cmux", "set-progress", "0.12"],
-    ["cmux", "workspace-action", "--action", "clear-description"],
-    ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
   ]);
   assert(!calls.some((call) => call[1] === "log"));
+});
+
+test("prompt submission updates workspace title and color by default", async () => {
+  const calls = [];
+  const controller = createCmuxStatusController({
+    env: { CMUX_WORKSPACE_ID: "workspace-1" },
+    elapsedIntervalMs: 0,
+    pulseIntervalMs: 0,
+    progressClearDelayMs: 0,
+    run: async (command, args) => {
+      calls.push([command, ...args]);
+      if (args[0] === "tree") {
+        return {
+          stdout: JSON.stringify({
+            active: { workspace_ref: "workspace:1" },
+            windows: [{ workspaces: [{ ref: "workspace:1", selected: true, title: "✅ GitHub Copilot" }] }],
+          }),
+        };
+      }
+      return {};
+    },
+  });
+
+  await controller.userPrompt("reading prompt");
+
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action rename --title 🤖 GitHub Copilot"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Amber"));
+  assertNoLifecycleStatusWrites(calls);
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 0.12 --label 🤖 reading prompt"));
 });
 
 test("marks the agent as done and clears progress", async () => {
@@ -181,11 +251,10 @@ test("marks the agent as done and clears progress", async () => {
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assertNoLifecycleStatusWrites(calls);
   assert(calls.some((call) => callLine(call) === "cmux set-progress 1.00"));
   assert(!calls.some((call) => callLine(call) === "cmux workspace-action --action set-description --description "));
   assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "clear-description"));
-  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Green"));
   assert(!calls.some((call) => callLine(call) === "cmux log --level success --source copilot-cmux-status -- ✅ Done"));
   assert(calls.some((call) => callLine(call) === "cmux notify --title Copilot is done --body ✅ Done"));
   assert(calls.some((call) => callLine(call) === "cmux clear-progress"));
@@ -200,11 +269,10 @@ test("uses the progress bar for context usage after usage info is available", as
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.21 --label ✅ Context 21% (42k/200k, 25 msgs)"));
   assert(!calls.some((call) => callLine(call) === "cmux workspace-action --action set-description --description "));
   assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "clear-description"));
-  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Green"));
   assert(calls.some((call) => callLine(call) === "cmux notify --title Copilot is done --body ✅ Done"));
 });
 
@@ -228,17 +296,17 @@ test("does not replace progress when context usage is invalid", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("can reset ready state without adding duplicate ready logs", async () => {
+test("can reset ready state without adding duplicate ready logs or status", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.ready("✅ Ready", { log: false });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Ready --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(!calls.some((call) => call[1] === "log"));
 });
 
-test("startup clears stale CMUX surfaces before writing one ready status", async () => {
+test("startup clears stale CMUX surfaces without writing duplicate ready status", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.startupReady("✅ Ready");
@@ -249,9 +317,18 @@ test("startup clears stale CMUX surfaces before writing one ready status", async
     ["cmux", "clear-status", "copilot"],
     ["cmux", "workspace-action", "--action", "clear-description"],
     ["cmux", "clear-log"],
-    ["cmux", "set-status", "copilot-cli", "✅ Ready", "--icon", "checkmark", "--color", "#196F3D"],
-    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
   ]);
+});
+
+test("can opt in to lifecycle status when not using CMUX native Copilot hooks", async () => {
+  const { controller, calls } = createRecorder({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_LIFECYCLE_STATUS: "1",
+  });
+
+  await controller.ready("✅ Ready", { log: false });
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Ready --icon checkmark --color #196F3D"));
 });
 
 test("can preserve startup logs when clearing logs is disabled", async () => {
@@ -286,9 +363,9 @@ test("marks failed tools as attention-grabbing while the agent keeps working", a
   await controller.toolComplete("apply_patch", false);
 
   assert(calls.some((call) => callLine(call) === "cmux log --level error --source copilot-cmux-status -- apply patch failed"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-cli 🔴 apply patch failed --icon xmark --color #B00020"));
-  assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "set-description"));
-  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assertNoWorkspaceDescriptionWrites(calls);
+  assert(!calls.some((call) => call[1] === "workspace-action"));
 });
 
 test("reports cmux command failures once without throwing", async () => {
@@ -310,7 +387,7 @@ test("reports cmux command failures once without throwing", async () => {
   await controller.ready();
   await controller.done();
 
-  assert.equal(calls.length, 7);
+  assert.equal(calls.length, 3);
   assert.deepEqual(errors, ["cmux command failed: cmux unavailable"]);
 });
 
@@ -339,13 +416,13 @@ test("marks context yellow at 100k tokens and red at 50 percent", async () => {
 
   await controller.contextUsage({ currentTokens: 100_000, tokenLimit: 272_000, messagesLength: 10 });
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.37 --label ✅ Context 37% (100k/272k, 10 msgs)"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
+  assert(!calls.some((call) => call[1] === "workspace-action"));
 
   calls.length = 0;
   await controller.contextUsage({ currentTokens: 136_000, tokenLimit: 272_000, messagesLength: 11 });
   await controller.startWorking("thinking");
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking --icon gear --color #B00020"));
+  assertNoLifecycleStatusWrites(calls);
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.50 --label 🤖 Context 50% (136k/272k, 11 msgs)"));
 });
 
@@ -357,17 +434,17 @@ test("makes permission requests obvious", async () => {
     permissionRequest: { kind: "shell", fullCommandText: "npm test -- --watch" },
   });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🚨 APPROVAL NEEDED: shell command npm test -- --watch --icon exclamationmark.triangle --color #B00020"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 1.00"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot needs approval --body 🚨 APPROVAL NEEDED: shell command npm test -- --watch"));
 });
 
-test("shows elapsed time for permission requests that start a turn", async () => {
+test("shows elapsed time for permission requests on the workspace card when enabled", async () => {
   const calls = [];
   const now = 1_000_000;
   let intervalCallback;
   const controller = createCmuxStatusController({
-    env: { CMUX_WORKSPACE_ID: "workspace-1" },
+    env: { CMUX_WORKSPACE_ID: "workspace-1", CMUX_COPILOT_WORKSPACE_CARD: "1" },
     elapsedIntervalMs: 1000,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
@@ -407,7 +484,7 @@ test("shows elapsed time for permission requests that start a turn", async () =>
 });
 
 test("tracks subagents and summarizes completion", async () => {
-  const { controller, calls } = createRecorder();
+  const { controller, calls } = createCardRecorder();
 
   await controller.userPrompt("prompt received");
   await controller.subagentStarted({
@@ -423,27 +500,27 @@ test("tracks subagents and summarizes completion", async () => {
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🤖 Subagents completed: 1"));
 });
 
-test("does not duplicate completed tool summary in workspace description", async () => {
-  const { controller, calls } = createRecorder();
+test("keeps tool summary out of workspace description", async () => {
+  const { controller, calls } = createCardRecorder();
 
   await controller.toolStart("bash", { command: "npm test" });
   await controller.toolComplete("bash", true);
   await controller.toolStart("view");
   await controller.toolComplete("view", true);
-  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 2"));
+  assert(!workspaceDescriptions(calls).some((description) => description.includes("Tools invoked")));
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
-  assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "set-description"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assertNoWorkspaceDescriptionWrites(calls);
 });
 
-test("tracks invoked skill names without changing done status", async () => {
-  const { controller, calls } = createRecorder();
+test("tracks invoked skill names on the workspace card when enabled", async () => {
+  const { controller, calls } = createCardRecorder();
 
   await controller.userPrompt("prompt received");
   calls.length = 0;
@@ -457,12 +534,12 @@ test("tracks invoked skill names without changing done status", async () => {
   calls.length = 0;
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
-  assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "set-description"));
+  assertNoLifecycleStatusWrites(calls);
+  assertNoWorkspaceDescriptionWrites(calls);
 });
 
-test("tracks injected skill context when skill invoked events are absent", async () => {
-  const { controller, calls } = createRecorder();
+test("tracks injected skill context on the workspace card when enabled", async () => {
+  const { controller, calls } = createCardRecorder();
 
   await controller.userPrompt("prompt received");
   calls.length = 0;
@@ -473,7 +550,7 @@ test("tracks injected skill context when skill invoked events are absent", async
 });
 
 test("tracks autopilot goal objective from injected message text", async () => {
-  const { controller, calls } = createRecorder();
+  const { controller, calls } = createCardRecorder();
 
   await controller.userPrompt("prompt received");
   calls.length = 0;
@@ -486,12 +563,12 @@ test("tracks autopilot goal objective from injected message text", async () => {
   ].join("\n"));
 
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🎯 Goal: implement goal mode support"));
-  assert(!calls.some((call) => call[1] === "set-status"));
+  assertNoLifecycleStatusWrites(calls);
   assert(!calls.some((call) => call[1] === "set-progress"));
 });
 
 test("allows goal mode card line to be disabled", async () => {
-  const { controller, calls } = createRecorder({
+  const { controller, calls } = createCardRecorder({
     CMUX_WORKSPACE_ID: "workspace-1",
     CMUX_COPILOT_SHOW_GOAL: "0",
   });
@@ -505,29 +582,27 @@ test("allows goal mode card line to be disabled", async () => {
   assert(!workspaceDescriptions(calls).some((description) => description.includes("Goal:")));
 });
 
-test("tracks running AIC usage total without changing done status", async () => {
-  const { controller, calls } = createRecorder();
+test("tracks running AIC usage total without writing workspace description", async () => {
+  const { controller, calls } = createCardRecorder();
 
   await controller.assistantUsage({ apiCallId: "call-1", cost: 1, model: "gpt-5.5" });
   await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
   await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
 
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1.5"));
+  assert(!workspaceDescriptions(calls).some((description) => description.includes("AIC used")));
   assert(!calls.some((call) => call[1] === "log" && String(call[7]).includes("AIC used")));
-  assert(workspaceDescriptions(calls).every((description) => aicLineCount(description) <= 1));
 
   calls.length = 0;
   await controller.done();
 
   assert(!calls.some((call) => call[1] === "set-status"));
-  assert(!calls.some((call) => call[1] === "workspace-action" && call[3] === "set-description"));
+  assertNoWorkspaceDescriptionWrites(calls);
 });
 
 test("keeps context out of the workspace card when progress owns context", async () => {
   const calls = [];
   const controller = createCmuxStatusController({
-    env: { CMUX_WORKSPACE_ID: "workspace-1" },
+    env: { CMUX_WORKSPACE_ID: "workspace-1", CMUX_COPILOT_WORKSPACE_CARD: "1" },
     elapsedIntervalMs: 0,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
@@ -544,7 +619,8 @@ test("keeps context out of the workspace card when progress owns context", async
   await controller.toolComplete("bash", true);
   await controller.toolStart("view");
   await controller.toolComplete("view", true);
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 2\n🧰 Skills: cmux"));
+  assert(!workspaceDescriptions(calls).some((description) => description.includes("Tools invoked")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Skills: cmux")));
   calls.length = 0;
   await controller.done();
 
@@ -554,7 +630,7 @@ test("keeps context out of the workspace card when progress owns context", async
 });
 
 test("shows context on the workspace card when context progress is disabled", async () => {
-  const { controller, calls } = createRecorder({
+  const { controller, calls } = createCardRecorder({
     CMUX_WORKSPACE_ID: "workspace-1",
     CMUX_COPILOT_CONTEXT_PROGRESS: "0",
   });
@@ -565,7 +641,7 @@ test("shows context on the workspace card when context progress is disabled", as
 });
 
 test("allows workspace detail lines to be disabled independently", async () => {
-  const { controller, calls } = createRecorder({
+  const { controller, calls } = createCardRecorder({
     CMUX_WORKSPACE_ID: "workspace-1",
     CMUX_COPILOT_SHOW_AIC: "0",
     CMUX_COPILOT_SHOW_COMPACTIONS: "0",
@@ -588,7 +664,7 @@ test("allows workspace detail lines to be disabled independently", async () => {
 });
 
 test("does not generate ellipses for long skill or subagent lists", async () => {
-  const { controller, calls } = createRecorder();
+  const { controller, calls } = createCardRecorder();
 
   await controller.skillInvoked({ name: "cmux" });
   await controller.skillInvoked({ name: "worktree-arena" });
@@ -598,13 +674,13 @@ test("does not generate ellipses for long skill or subagent lists", async () => 
   await controller.subagentStarted({ toolCallId: "b", agentDisplayName: "Beta" });
   await controller.subagentStarted({ toolCallId: "c", agentDisplayName: "Gamma" });
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 3 subagents running: Alpha, Beta, Gamma --icon gear --color #B26A00"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux, worktree-arena, autoreview, crabbox"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Skills: cmux, worktree-arena, autoreview, crabbox")));
   assert(!calls.some((call) => call.some((part) => String(part).includes("...") || String(part).includes("…"))));
 });
 
 test("tracks compaction count without changing done status", async () => {
-  const { controller, calls } = createRecorder();
+  const { controller, calls } = createCardRecorder();
 
   await controller.compactionStarted({ conversationTokens: 180_000 });
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
@@ -615,7 +691,7 @@ test("tracks compaction count without changing done status", async () => {
   await controller.done();
 
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- compaction complete: 1 compaction, 75k tokens removed"));
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done --icon checkmark --color #196F3D"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧹 Compactions: 1"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot is done --body 🧹 Compactions: 1"));
 });
@@ -628,9 +704,9 @@ test("marks failed compactions as needing attention", async () => {
   await controller.compactionCompleted({ success: false, error: "summary failed" });
   await controller.done();
 
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🔴 compaction failed --icon xmark --color #B00020"));
+  assert(!calls.some((call) => call[1] === "set-status"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level error --source copilot-cmux-status -- compaction failed: summary failed"));
-  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🔴 Needs attention: compaction failed --icon xmark --color #B00020"));
+  assert(!calls.some((call) => call[1] === "set-status"));
 });
 
 test("logs raw events when debug mode is enabled", async () => {
@@ -643,13 +719,14 @@ test("logs raw events when debug mode is enabled", async () => {
   ]);
 });
 
-test("prefixes workspace title with working and done emoji", async () => {
+test("can opt in to workspace title prefixes", async () => {
   const calls = [];
   const controller = createCmuxStatusController({
     env: { CMUX_WORKSPACE_ID: "workspace-1" },
     elapsedIntervalMs: 0,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
+    workspaceTitle: true,
     run: async (command, args) => {
       calls.push([command, ...args]);
       if (args[0] === "tree") {
