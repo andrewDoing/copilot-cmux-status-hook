@@ -1,0 +1,25 @@
+{
+  "name": "copilot-cmux-status-hook",
+  "version": "1.0.0",
+  "description": "Copilot CLI extension that mirrors agent working/done state into CMUX.",
+  "type": "module",
+  "main": "extension.mjs",
+  "scripts": {
+    "lint": "node --check extension.mjs && node --check lib/cmux-status.mjs && node --check scripts/install.mjs && node --check scripts/uninstall.mjs && node --check test/cmux-status.test.mjs",
+    "test": "node --test",
+    "check": "npm run lint && npm test",
+    "install:extension": "node scripts/install.mjs",
+    "uninstall:extension": "node scripts/uninstall.mjs"
+  },
+  "keywords": [
+    "copilot-cli",
+    "cmux",
+    "extension",
+    "hook"
+  ],
+  "author": "Andrew Doing",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}
