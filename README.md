@@ -15,7 +15,7 @@ This Copilot CLI extension listens to session hooks and events, then mirrors the
 
 The extension is inert outside CMUX. If `CMUX_WORKSPACE_ID` is not set, it does nothing.
 
-Workspace card descriptions are de-duplicated against the status item, progress label, and title badge so the same status does not appear twice on the CMUX workspace card.
+Each CMUX surface has one owner: the status item and title show lifecycle, the progress bar shows context when available, and the workspace card shows supplemental details such as tools, skills, AIC, compactions, permissions, subagents, and elapsed time. If context progress is disabled, the workspace card shows context instead.
 
 ## Install
 
@@ -49,7 +49,6 @@ Set environment variables before starting Copilot CLI:
 | `CMUX_COPILOT_CONTEXT_PROGRESS` | `1` | Set to `0` to keep the progress bar for working/done state instead of context usage. |
 | `CMUX_COPILOT_WORKSPACE_CARD` | `1` | Set to `0` to avoid updating the visible CMUX workspace card description/color. |
 | `CMUX_COPILOT_WORKSPACE_TITLE` | `1` | Set to `0` to avoid prefixing the workspace title with status emoji. |
-| `CMUX_COPILOT_DEDUPE_SIDEBAR` | `1` | Set to `0` to stop de-duping card details against CMUX sidebar status entries. |
 | `CMUX_COPILOT_SHOW_AIC` | `1` | Set to `0` to hide the `💳 AIC used` card line. |
 | `CMUX_COPILOT_SHOW_COMPACTIONS` | `1` | Set to `0` to hide compaction card lines. |
 | `CMUX_COPILOT_SHOW_CONTEXT` | `1` | Set to `0` to hide context card lines; the progress bar can still show context when enabled. |

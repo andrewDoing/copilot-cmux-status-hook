@@ -13,7 +13,6 @@ function createRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
   const controller = createCmuxStatusController({
     env,
     elapsedIntervalMs: 0,
-    dedupeSidebar: false,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
     workspaceTitle: false,
@@ -112,11 +111,11 @@ test("uses the progress bar for context usage after usage info is available", as
       "--action",
       "set-description",
       "--description",
-      "🟢 Context 21% (42k/200k, 25 msgs)",
+      "",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "✅ Done"],
-    ["cmux", "notify", "--title", "Copilot is done", "--body", "🟢 Context 21% (42k/200k, 25 msgs)"],
+    ["cmux", "notify", "--title", "Copilot is done", "--body", "✅ Done"],
   ]);
 });
 
@@ -135,7 +134,7 @@ test("labels context progress as working while the agent is active", async () =>
       "--action",
       "set-description",
       "--description",
-      "🟢 Context 34% (93.6k/272k, 121 msgs)",
+      "",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
   ]);
@@ -186,7 +185,6 @@ test("reports cmux command failures once without throwing", async () => {
   const controller = createCmuxStatusController({
     env: { CMUX_WORKSPACE_ID: "workspace-1" },
     elapsedIntervalMs: 0,
-    dedupeSidebar: false,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
     workspaceTitle: false,
@@ -228,14 +226,15 @@ test("marks context yellow at 100k tokens and red at 50 percent", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.contextUsage({ currentTokens: 100_000, tokenLimit: 272_000, messagesLength: 10 });
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🟡 Context 37% (100k/272k, 10 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.37 --label ✅ Context 37% (100k/272k, 10 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
 
   calls.length = 0;
   await controller.contextUsage({ currentTokens: 136_000, tokenLimit: 272_000, messagesLength: 11 });
   await controller.startWorking("thinking");
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking --icon gear --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🔴 Context 50% (136k/272k, 11 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.50 --label 🤖 Context 50% (136k/272k, 11 msgs)"));
 });
 
 test("makes permission requests obvious", async () => {
@@ -258,7 +257,6 @@ test("shows elapsed time for permission requests that start a turn", async () =>
   const controller = createCmuxStatusController({
     env: { CMUX_WORKSPACE_ID: "workspace-1" },
     elapsedIntervalMs: 1000,
-    dedupeSidebar: false,
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
     workspaceTitle: false,
@@ -378,7 +376,7 @@ test("tracks running AIC usage total without changing done status", async () => 
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1.5"));
 });
 
-test("dedupes workspace details against cmux sidebar status entries while keeping context", async () => {
+test("keeps context out of the workspace card when progress owns context", async () => {
   const calls = [];
   const controller = createCmuxStatusController({
     env: { CMUX_WORKSPACE_ID: "workspace-1" },
@@ -388,16 +386,6 @@ test("dedupes workspace details against cmux sidebar status entries while keepin
     workspaceTitle: false,
     run: async (command, args) => {
       calls.push([command, ...args]);
-      if (args[0] === "sidebar-state") {
-        return {
-          stdout: [
-            "progress=0.21 🤖 Context 21% (42k/200k, 25 msgs)",
-            "status_count=2",
-            "  tools=🛠 Tools invoked: 2 icon=hammer color=#B26A00",
-            "  skills=🧰 Skills: cmux icon=wrench color=#B26A00",
-          ].join("\n"),
-        };
-      }
       return {};
     },
   });
@@ -410,6 +398,19 @@ test("dedupes workspace details against cmux sidebar status entries while keepin
   await controller.toolComplete("view", true);
   calls.length = 0;
   await controller.done();
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.21 --label ✅ Context 21% (42k/200k, 25 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🛠 Tools invoked: 2\n🧰 Skills: cmux"));
+  assert(!calls.some((call) => call[1] === "sidebar-state"));
+});
+
+test("shows context on the workspace card when context progress is disabled", async () => {
+  const { controller, calls } = createRecorder({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_CONTEXT_PROGRESS: "0",
+  });
+
+  await controller.contextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 });
 
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🟢 Context 21% (42k/200k, 25 msgs)"));
 });
