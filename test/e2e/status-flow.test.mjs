@@ -60,7 +60,7 @@ test("e2e event flow shows immediate working state, context usage, tool activity
   await session.emit("session.idle", { aborted: false });
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 prompt received --icon gear --color #B26A00"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
   assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.25 --label 🤖 Context 25% (68k/272k, 88 msgs)"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 💳 AIC used: 1"));
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux\n💳 AIC used: 1"));
@@ -78,7 +78,7 @@ test("e2e error flow marks the sidebar as needing attention", async () => {
   await hooks.onErrorOccurred({ error: "model failed" });
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🔴 Needs attention --icon xmark --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action clear-description"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot needs attention --body model failed"));
 });
 
