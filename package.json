@@ -5,7 +5,7 @@
   "type": "module",
   "main": "extension.mjs",
   "scripts": {
-    "lint": "node --check extension.mjs && node --check lib/cmux-status.mjs && node --check scripts/install.mjs && node --check scripts/uninstall.mjs && node --check test/cmux-status.test.mjs",
+    "lint": "node --check extension.mjs && find lib scripts test -name '*.mjs' -exec node --check {} \\;",
     "test": "node --test",
     "check": "npm run lint && npm test",
     "install:extension": "node scripts/install.mjs",

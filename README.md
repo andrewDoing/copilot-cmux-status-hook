@@ -66,4 +66,6 @@ npm run uninstall:extension
 npm run check
 ```
 
+`npm run check` runs syntax checks plus unit tests and E2E-style event-flow tests that drive the same Copilot lifecycle events the extension listens to in a real session.
+
 The extension entrypoint must be named `extension.mjs` for Copilot CLI discovery.
