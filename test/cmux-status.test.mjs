@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createCmuxStatusController, humanizeToolName } from "../lib/cmux-status.mjs";
+import {
+  createCmuxStatusController,
+  formatTokenCount,
+  humanizeToolName,
+  normalizeContextUsage,
+} from "../lib/cmux-status.mjs";
 
 function createRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
   const calls = [];
@@ -75,6 +80,40 @@ test("marks the agent as done and clears progress", async () => {
   ]);
 });
 
+test("uses the progress bar for context usage after usage info is available", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.contextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 });
+  await controller.startWorking("thinking");
+  calls.length = 0;
+  await controller.done();
+
+  assert.deepEqual(calls, [
+    ["cmux", "set-progress", "0.21", "--label", "Context 21% (42k/200k, 25 msgs)"],
+    [
+      "cmux",
+      "set-status",
+      "copilot-cli",
+      "Copilot done - waiting",
+      "--icon",
+      "checkmark",
+      "--color",
+      "#196F3D",
+    ],
+    ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
+    ["cmux", "trigger-flash"],
+    ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
+  ]);
+});
+
+test("does not replace progress when context usage is invalid", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.contextUsage({ currentTokens: 10, tokenLimit: 0, messagesLength: 1 });
+
+  assert.deepEqual(calls, []);
+});
+
 test("marks failed tools as attention-grabbing while the agent keeps working", async () => {
   const { controller, calls } = createRecorder();
 
@@ -123,4 +162,18 @@ test("humanizes tool names for display", () => {
   assert.equal(humanizeToolName("tool.execution_start"), "tool execution start");
   assert.equal(humanizeToolName("apply_patch"), "apply patch");
   assert.equal(humanizeToolName(""), "tool");
+});
+
+test("normalizes context usage labels and clamps ratio", () => {
+  assert.deepEqual(normalizeContextUsage({ currentTokens: 250_000, tokenLimit: 200_000, messagesLength: 12 }), {
+    currentTokens: 250_000,
+    tokenLimit: 200_000,
+    messagesLength: 12,
+    ratio: 1,
+    label: "Context 100% (250k/200k, 12 msgs)",
+  });
+  assert.equal(normalizeContextUsage({ currentTokens: 1, tokenLimit: 0 }), undefined);
+  assert.equal(formatTokenCount(999), "999");
+  assert.equal(formatTokenCount(1_500), "1.5k");
+  assert.equal(formatTokenCount(2_000_000), "2M");
 });

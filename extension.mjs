@@ -51,6 +51,10 @@ session.on("session.error", (event) => {
   void controller.error(event.data.message);
 });
 
+session.on("session.usage_info", (event) => {
+  void controller.contextUsage(event.data);
+});
+
 session.on("session.shutdown", (event) => {
   if (event.data.shutdownType === "error") {
     void controller.shutdown(event.data).finally(() => controller.dispose());

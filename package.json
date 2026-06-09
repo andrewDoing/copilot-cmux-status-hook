@@ -1,6 +1,6 @@
 {
   "name": "copilot-cmux-status-hook",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Copilot CLI extension that mirrors agent working/done state into CMUX.",
   "type": "module",
   "main": "extension.mjs",

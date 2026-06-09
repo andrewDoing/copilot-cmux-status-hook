@@ -4,8 +4,9 @@ Make GitHub Copilot CLI status obvious in CMUX.
 
 This Copilot CLI extension listens to session hooks and events, then mirrors the agent state into CMUX:
 
-- **Working:** orange sidebar status, pulsing progress bar, log entry, and surface flash.
-- **Done:** green sidebar status, full progress bar, log entry, surface flash, and desktop notification.
+- **Working:** orange sidebar status, log entry, surface flash, and a pulsing progress bar until context usage is known.
+- **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count.
+- **Done:** green sidebar status, log entry, surface flash, and desktop notification.
 - **Needs attention:** red sidebar status, error log entry, surface flash, and desktop notification.
 
 The extension is inert outside CMUX. If `CMUX_WORKSPACE_ID` is not set, it does nothing.
@@ -28,7 +29,7 @@ In Copilot CLI:
 /env
 ```
 
-Look for the `cmux-status` extension. When you submit a prompt inside CMUX, the sidebar should switch to **Copilot working**. When the turn becomes idle, it should switch to **Copilot done**.
+Look for the `cmux-status` extension. When you submit a prompt inside CMUX, the sidebar should switch to **Copilot working**. When the turn becomes idle, it should switch to **Copilot done**. After Copilot emits usage data, the progress bar should show context usage, for example `Context 21% (42k/200k, 25 msgs)`.
 
 ## Configuration
 
@@ -39,8 +40,9 @@ Set environment variables before starting Copilot CLI:
 | `CMUX_COPILOT_STATUS_KEY` | `copilot-cli` | CMUX sidebar status key to write. |
 | `CMUX_COPILOT_NOTIFY_DONE` | `1` | Set to `0` to disable done notifications. |
 | `CMUX_COPILOT_NOTIFY_ERROR` | `1` | Set to `0` to disable error notifications. |
+| `CMUX_COPILOT_CONTEXT_PROGRESS` | `1` | Set to `0` to keep the progress bar for working/done state instead of context usage. |
 | `CMUX_COPILOT_PULSE_MS` | `1200` | Progress pulse interval while the agent works. |
-| `CMUX_COPILOT_CLEAR_PROGRESS_MS` | `4000` | Delay before clearing the completed progress bar. |
+| `CMUX_COPILOT_CLEAR_PROGRESS_MS` | `4000` | Delay before clearing the completed progress bar when context progress is unavailable or disabled. |
 | `CMUX_COPILOT_LOG_SOURCE` | `copilot-cmux-status` | Source label for CMUX log entries. |
 
 ## Update
