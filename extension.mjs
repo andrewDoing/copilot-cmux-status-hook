@@ -31,6 +31,10 @@ session.on("assistant.turn_start", (event) => {
   void controller.startWorking(`thinking turn ${event.data.turnId}`);
 });
 
+session.on("user.message", () => {
+  void controller.startWorking("prompt received");
+});
+
 session.on("tool.execution_start", (event) => {
   toolNames.set(event.data.toolCallId, event.data.toolName);
   void controller.toolStart(event.data.toolName);

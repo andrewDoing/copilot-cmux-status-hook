@@ -5,7 +5,7 @@ Make GitHub Copilot CLI status obvious in CMUX.
 This Copilot CLI extension listens to session hooks and events, then mirrors the agent state into CMUX:
 
 - **Working:** orange sidebar status, log entry, surface flash, and a pulsing progress bar until context usage is known.
-- **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count.
+- **Context usage:** persistent progress bar from Copilot's `session.usage_info` event, labeled with percentage, token counts, and message count. While the agent is active, the label is prefixed with `Working -`.
 - **Done:** green sidebar status, log entry, surface flash, and desktop notification.
 - **Needs attention:** red sidebar status, error log entry, surface flash, and desktop notification.
 
@@ -29,7 +29,7 @@ In Copilot CLI:
 /env
 ```
 
-Look for the `cmux-status` extension. When you submit a prompt inside CMUX, the sidebar should switch to **Copilot working**. When the turn becomes idle, it should switch to **Copilot done**. After Copilot emits usage data, the progress bar should show context usage, for example `Context 21% (42k/200k, 25 msgs)`.
+Look for the `cmux-status` extension. When you submit a prompt inside CMUX, the sidebar should switch to **Copilot working** immediately after the user message is accepted. When the turn becomes idle, it should switch to **Copilot done**. After Copilot emits usage data, the progress bar should show context usage, for example `Working - Context 21% (42k/200k, 25 msgs)` while active and `Context 21% (42k/200k, 25 msgs)` while idle.
 
 ## Configuration
 

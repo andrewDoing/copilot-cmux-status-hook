@@ -85,6 +85,7 @@ test("uses the progress bar for context usage after usage info is available", as
 
   await controller.contextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 });
   await controller.startWorking("thinking");
+  assert.deepEqual(calls.at(-3), ["cmux", "set-progress", "0.21", "--label", "Working - Context 21% (42k/200k, 25 msgs)"]);
   calls.length = 0;
   await controller.done();
 
@@ -103,6 +104,18 @@ test("uses the progress bar for context usage after usage info is available", as
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "Copilot done - waiting"],
     ["cmux", "trigger-flash"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "The agent is waiting for your next instruction."],
+  ]);
+});
+
+test("labels context progress as working while the agent is active", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.startWorking("prompt received");
+  calls.length = 0;
+  await controller.contextUsage({ currentTokens: 93_600, tokenLimit: 272_000, messagesLength: 121 });
+
+  assert.deepEqual(calls, [
+    ["cmux", "set-progress", "0.34", "--label", "Working - Context 34% (93.6k/272k, 121 msgs)"],
   ]);
 });
 
