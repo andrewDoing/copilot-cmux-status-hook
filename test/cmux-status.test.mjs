@@ -51,7 +51,7 @@ test("marks the agent as working with status, progress, and log", async () => {
       "#B26A00",
     ],
     ["cmux", "set-progress", "0.12", "--label", "🤖 thinking"],
-    ["cmux", "workspace-action", "--action", "set-description", "--description", "🤖 thinking"],
+    ["cmux", "workspace-action", "--action", "set-description", "--description", ""],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
     ["cmux", "log", "--level", "info", "--source", "copilot-cmux-status", "--", "🤖 thinking"],
   ]);
@@ -76,7 +76,7 @@ test("marks the agent as done and clears progress", async () => {
       "--color",
       "#196F3D",
     ],
-    ["cmux", "workspace-action", "--action", "set-description", "--description", "✅ Done"],
+    ["cmux", "workspace-action", "--action", "set-description", "--description", ""],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "✅ Done"],
     ["cmux", "notify", "--title", "Copilot is done", "--body", "✅ Done"],
@@ -111,7 +111,7 @@ test("uses the progress bar for context usage after usage info is available", as
       "--action",
       "set-description",
       "--description",
-      "✅ Done\n🟢 Context 21% (42k/200k, 25 msgs)",
+      "🟢 Context 21% (42k/200k, 25 msgs)",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
     ["cmux", "log", "--level", "success", "--source", "copilot-cmux-status", "--", "✅ Done"],
@@ -134,7 +134,7 @@ test("labels context progress as working while the agent is active", async () =>
       "--action",
       "set-description",
       "--description",
-      "🤖 prompt received\n🟢 Context 34% (93.6k/272k, 121 msgs)",
+      "🟢 Context 34% (93.6k/272k, 121 msgs)",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Amber"],
   ]);
@@ -173,7 +173,7 @@ test("marks failed tools as attention-grabbing while the agent keeps working", a
       "--action",
       "set-description",
       "--description",
-      "🔴 apply patch failed",
+      "",
     ],
     ["cmux", "workspace-action", "--action", "set-color", "--color", "Red"],
   ]);
@@ -226,14 +226,14 @@ test("marks context yellow at 100k tokens and red at 50 percent", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.contextUsage({ currentTokens: 100_000, tokenLimit: 272_000, messagesLength: 10 });
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description ✅ Done\n🟡 Context 37% (100k/272k, 10 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🟡 Context 37% (100k/272k, 10 msgs)"));
 
   calls.length = 0;
   await controller.contextUsage({ currentTokens: 136_000, tokenLimit: 272_000, messagesLength: 11 });
   await controller.startWorking("thinking");
 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli 🤖 thinking --icon gear --color #B00020"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🤖 thinking\n🔴 Context 50% (136k/272k, 11 msgs)"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🔴 Context 50% (136k/272k, 11 msgs)"));
 });
 
 test("makes permission requests obvious", async () => {
@@ -289,7 +289,7 @@ test("shows elapsed time for permission requests that start a turn", async () =>
     controller.dispose();
   }
 
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🚨 APPROVAL NEEDED: file write\nElapsed 5s"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description Elapsed 5s"));
 });
 
 test("tracks subagents and summarizes completion", async () => {
@@ -312,11 +312,25 @@ test("tracks subagents and summarizes completion", async () => {
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 1 subagent --icon checkmark --color #196F3D"));
 });
 
+test("does not duplicate completed tool summary in workspace description", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.toolStart("bash", { command: "npm test" });
+  await controller.toolComplete("bash", true);
+  await controller.toolStart("view");
+  await controller.toolComplete("view", true);
+  calls.length = 0;
+  await controller.done();
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 2 tools --icon checkmark --color #196F3D"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description "));
+});
+
 test("tracks compaction count and includes it in done summary", async () => {
   const { controller, calls } = createRecorder();
 
   await controller.compactionStarted({ conversationTokens: 180_000 });
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🤖 compacting context\n🧹 Compacting context"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧹 Compacting context"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- compaction started at 180k conversation tokens"));
 
   calls.length = 0;
@@ -325,7 +339,7 @@ test("tracks compaction count and includes it in done summary", async () => {
 
   assert(calls.some((call) => call.join(" ") === "cmux log --level success --source copilot-cmux-status -- compaction complete: 1 compaction, 75k tokens removed"));
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Done: 1 compaction --icon checkmark --color #196F3D"));
-  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description ✅ Done: 1 compaction\n🧹 Compactions: 1"));
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧹 Compactions: 1"));
   assert(calls.some((call) => call.join(" ") === "cmux notify --title Copilot is done --body ✅ Done: 1 compaction"));
 });
 
