@@ -118,6 +118,39 @@ test("render plan moves context to workspace card when context progress is disab
   assert.equal(plan.workspaceDescription, "🟢 Context 21% (42k/200k, 25 msgs)");
 });
 
+test("render plan assigns goal mode to the workspace card only", () => {
+  const state = {
+    activeSubagents: new Map(),
+    aiCreditsUsed: 2,
+    attentionActive: false,
+    attentionMessage: "",
+    compactionActive: false,
+    compactionCount: 0,
+    contextUsage: normalizeContextUsage({ currentTokens: 42_000, tokenLimit: 200_000, messagesLength: 25 }),
+    currentActivity: "thinking",
+    goal: { active: true, title: "implement goal mode support" },
+    permissionActive: false,
+    permissionMessage: "",
+    progress: 0.12,
+    state: "working",
+    turnStartedAt: undefined,
+    turnStats: {
+      toolCount: 0,
+      failedTools: 0,
+      completedSubagents: 0,
+      failedSubagents: 0,
+      skills: new Map([["cmux", 1]]),
+      tools: new Map(),
+    },
+  };
+
+  const plan = renderPlan(state, testConfig(), "🤖 thinking");
+
+  assert.equal(plan.status.value, "🤖 thinking");
+  assert.equal(plan.progress.label, "🤖 Context 21% (42k/200k, 25 msgs)");
+  assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux\n💳 AIC used: 2");
+});
+
 test("marks the agent as working with status, progress, and log", async () => {
   const { controller, calls } = createRecorder();
 
@@ -385,6 +418,39 @@ test("tracks injected skill context when skill invoked events are absent", async
 
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🧰 Skills: cmux"));
   assert(calls.some((call) => call.join(" ") === "cmux log --level info --source copilot-cmux-status -- skill invoked: cmux (context-load)"));
+});
+
+test("tracks autopilot goal objective from injected message text", async () => {
+  const { controller, calls } = createRecorder();
+
+  await controller.userPrompt("prompt received");
+  calls.length = 0;
+  await controller.goalModeMessage([
+    "The user set this explicit autopilot objective with /autopilot:",
+    "",
+    "implement goal mode support",
+    "",
+    "Work autonomously toward this objective in clear checkpoints.",
+  ].join("\n"));
+
+  assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🎯 Goal: implement goal mode support"));
+  assert(!calls.some((call) => call[1] === "set-status"));
+  assert(!calls.some((call) => call[1] === "set-progress"));
+});
+
+test("allows goal mode card line to be disabled", async () => {
+  const { controller, calls } = createRecorder({
+    CMUX_WORKSPACE_ID: "workspace-1",
+    CMUX_COPILOT_SHOW_GOAL: "0",
+  });
+
+  await controller.goalModeMessage([
+    "The user set this explicit autopilot objective with /autopilot:",
+    "",
+    "hide this goal",
+  ].join("\n"));
+
+  assert(!workspaceDescriptions(calls).some((description) => description.includes("Goal:")));
 });
 
 test("tracks running AIC usage total without changing done status", async () => {
