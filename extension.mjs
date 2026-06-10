@@ -17,7 +17,18 @@ const session = await joinSession({
 
 registerCmuxStatusEvents(session, controller);
 
-process.once("SIGTERM", () => {
+let cleanupStarted = false;
+
+async function cleanupAndExit(signal) {
+  if (cleanupStarted) return;
+  cleanupStarted = true;
+  await controller.clearStatus();
   controller.dispose();
-  process.exit(0);
-});
+  process.exit(signal === "SIGINT" ? 130 : 0);
+}
+
+for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+  process.once(signal, () => {
+    void cleanupAndExit(signal);
+  });
+}
