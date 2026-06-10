@@ -21,7 +21,7 @@ class FakeSession {
   }
 }
 
-function createHarness(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
+function createHarness(env = { CMUX_WORKSPACE_ID: "workspace-1", CMUX_COPILOT_WORKSPACE_CARD: "0" }) {
   const calls = [];
   const controller = createCmuxStatusController({
     env,
@@ -90,7 +90,7 @@ test("e2e turn start does not duplicate thinking text in progress", async () => 
   assert(!calls.some((call) => call[1] === "set-progress" && String(call[4] || "").includes("thinking turn 6")));
 });
 
-test("e2e goal mode flow avoids workspace card duplication by default", async () => {
+test("e2e goal mode flow avoids workspace card duplication when workspace card is disabled", async () => {
   const { calls, hooks, session } = createHarness();
 
   await hooks.onUserPromptSubmitted();

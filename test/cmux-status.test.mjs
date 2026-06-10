@@ -9,7 +9,7 @@ import {
   renderPlan,
 } from "../lib/cmux-status.mjs";
 
-function createRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1" }) {
+function createRecorder(env = { CMUX_WORKSPACE_ID: "workspace-1", CMUX_COPILOT_WORKSPACE_CARD: "0" }) {
   const calls = [];
   const errors = [];
   const controller = createCmuxStatusController({
@@ -66,7 +66,7 @@ test("does not call cmux outside CMUX", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("render plan keeps AIC out of the workspace card", () => {
+test("render plan shows AIC on the workspace card", () => {
   const state = {
     activeSubagents: new Map(),
     aiCreditsUsed: 7.5,
@@ -95,8 +95,8 @@ test("render plan keeps AIC out of the workspace card", () => {
 
   assert.equal(plan.status, undefined);
   assert.equal(plan.progress.label, "✅ Context 33% (90.3k/272k, 78 msgs)");
-  assert.equal(plan.workspaceDescription, "");
-  assert.equal(aicLineCount(plan.workspaceDescription), 0);
+  assert.equal(plan.workspaceDescription, "💳 AIC used: 7.5");
+  assert.equal(aicLineCount(plan.workspaceDescription), 1);
 });
 
 test("render plan moves context to workspace card when context progress is disabled", () => {
@@ -160,7 +160,7 @@ test("render plan assigns goal mode to the workspace card only", () => {
 
   assert.equal(plan.status, undefined);
   assert.equal(plan.progress.label, "🤖 Context 21% (42k/200k, 25 msgs)");
-  assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux");
+  assert.equal(plan.workspaceDescription, "🎯 Goal: implement goal mode support\n🧰 Skills: cmux\n💳 AIC used: 2");
 });
 
 test("render plan routes detail kinds through the surface policy", () => {
@@ -195,13 +195,15 @@ test("render plan routes detail kinds through the surface policy", () => {
   assert.equal(plan.workspaceDescription, [
     "1 subagent running: Reviewer",
     "🤖 Subagents completed: 1",
+    "🛠 Tools invoked: 2",
     "🎯 Goal: implement goal mode support",
     "🧰 Skills: cmux",
     "🟢 Context 21% (42k/200k, 25 msgs)",
     "🧹 Compactions: 1",
+    "💳 AIC used: 2",
   ].join("\n"));
-  assert(!plan.workspaceDescription.includes("AIC used"));
-  assert(!plan.workspaceDescription.includes("Tools invoked"));
+  assert(plan.workspaceDescription.includes("AIC used"));
+  assert(plan.workspaceDescription.includes("Tools invoked"));
 });
 
 test("adds working progress without writing lifecycle status or logs", async () => {
@@ -331,6 +333,65 @@ test("can opt in to lifecycle status when not using CMUX native Copilot hooks", 
   assert(calls.some((call) => call.join(" ") === "cmux set-status copilot-cli ✅ Ready --icon checkmark --color #196F3D"));
 });
 
+test("pulse updates do not clear opt-in lifecycle status", async () => {
+  const calls = [];
+  let intervalCallback;
+  const controller = createCmuxStatusController({
+    env: {
+      CMUX_WORKSPACE_ID: "workspace-1",
+      CMUX_COPILOT_LIFECYCLE_STATUS: "1",
+      CMUX_COPILOT_WORKSPACE_CARD: "0",
+    },
+    elapsedIntervalMs: 0,
+    pulseIntervalMs: 100,
+    progressClearDelayMs: 0,
+    workspaceTitle: false,
+    timers: {
+      setInterval(callback) {
+        intervalCallback = callback;
+        return 1;
+      },
+      clearInterval() {},
+      setTimeout() {
+        return 1;
+      },
+      clearTimeout() {},
+    },
+    run: async (command, args) => {
+      calls.push([command, ...args]);
+    },
+  });
+
+  await controller.startWorking("thinking");
+  calls.length = 0;
+  intervalCallback();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert(calls.some((call) => call.join(" ") === "cmux set-progress 0.20"));
+  assert(!calls.some((call) => call[1] === "clear-status"));
+  controller.dispose();
+});
+
+test("workspace card details are visible by default", async () => {
+  const calls = [];
+  const controller = createCmuxStatusController({
+    env: { CMUX_WORKSPACE_ID: "workspace-1" },
+    elapsedIntervalMs: 0,
+    pulseIntervalMs: 0,
+    progressClearDelayMs: 0,
+    workspaceTitle: false,
+    run: async (command, args) => {
+      calls.push([command, ...args]);
+    },
+  });
+
+  await controller.skillInvoked({ name: "cmux" });
+  await controller.toolStart("bash", { command: "npm test" });
+
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Skills: cmux")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Tools invoked: 1")));
+});
+
 test("can preserve startup logs when clearing logs is disabled", async () => {
   const { controller, calls } = createRecorder({
     CMUX_WORKSPACE_ID: "workspace-1",
@@ -377,6 +438,7 @@ test("reports cmux command failures once without throwing", async () => {
     pulseIntervalMs: 0,
     progressClearDelayMs: 0,
     workspaceTitle: false,
+    workspaceCard: false,
     run: async (command, args) => {
       calls.push([command, ...args]);
       throw new Error("cmux unavailable");
@@ -504,14 +566,14 @@ test("tracks subagents and summarizes completion", async () => {
   assert(calls.some((call) => call.join(" ") === "cmux workspace-action --action set-description --description 🤖 Subagents completed: 1"));
 });
 
-test("keeps tool summary out of workspace description", async () => {
+test("shows tool summary on the workspace card", async () => {
   const { controller, calls } = createCardRecorder();
 
   await controller.toolStart("bash", { command: "npm test" });
   await controller.toolComplete("bash", true);
   await controller.toolStart("view");
   await controller.toolComplete("view", true);
-  assert(!workspaceDescriptions(calls).some((description) => description.includes("Tools invoked")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Tools invoked: 2")));
   calls.length = 0;
   await controller.done();
 
@@ -582,14 +644,15 @@ test("allows goal mode card line to be disabled", async () => {
   assert(!workspaceDescriptions(calls).some((description) => description.includes("Goal:")));
 });
 
-test("tracks running AIC usage total without writing workspace description", async () => {
+test("tracks running AIC usage total on the workspace card", async () => {
   const { controller, calls } = createCardRecorder();
 
   await controller.assistantUsage({ apiCallId: "call-1", cost: 1, model: "gpt-5.5" });
   await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
   await controller.assistantUsage({ apiCallId: "call-2", cost: 0.5, model: "gpt-5-mini" });
 
-  assert(!workspaceDescriptions(calls).some((description) => description.includes("AIC used")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("AIC used: 1")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("AIC used: 1.5")));
   assert(!calls.some((call) => call[1] === "log" && String(call[7]).includes("AIC used")));
 
   calls.length = 0;
@@ -619,7 +682,7 @@ test("keeps context out of the workspace card when progress owns context", async
   await controller.toolComplete("bash", true);
   await controller.toolStart("view");
   await controller.toolComplete("view", true);
-  assert(!workspaceDescriptions(calls).some((description) => description.includes("Tools invoked")));
+  assert(workspaceDescriptions(calls).some((description) => description.includes("Tools invoked: 2")));
   assert(workspaceDescriptions(calls).some((description) => description.includes("Skills: cmux")));
   calls.length = 0;
   await controller.done();
