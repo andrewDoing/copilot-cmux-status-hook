@@ -55,7 +55,7 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
   await hooks.onSessionStart();
   await session.emit("user.message", { content: "ignored by simplified hook" });
   await session.emit("assistant.turn_start", { turnId: "7" });
-  await session.emit("tool.execution_start", { toolCallId: "tool-1", toolName: "bash" });
+  await session.emit("tool.execution_start", { toolCallId: "tool-1", toolName: "bash", arguments: { command: "npm run check" } });
   await session.emit("session.usage_info", {
     currentTokens: 68_000,
     tokenLimit: 272_000,
@@ -65,10 +65,15 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
   await session.emit("tool.execution_complete", { toolCallId: "tool-1", success: true });
   await session.emit("session.idle", { aborted: false });
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 0 --icon creditcard --color #4F46E5 --priority 100"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 Context 25% (68k/272k, 88 msgs) --icon gauge --color #196F3D --priority 90"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 1 --icon creditcard --color #4F46E5 --priority 100"));
-  assert(!calls.some((call) => call[1] === "set-progress"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
+  assert(calls.some((call) => callLine(call) === "cmux rename-tab --surface surface-1 🦊 Copilot"));
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 0.05 --label 🦊 Working: reading prompt"));
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 0.15 --label 🦊 Working: thinking"));
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 0.45 --label 🦊 Working: running tests"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Context 25% (68k/272k, 88 msgs) --icon 🟢 --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-progress 0.25"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Working: bash finished · Context 25% (68k/272k, 88 msgs) --icon 🟢 --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 1 --priority 100"));
   assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(!calls.some((call) => call[1] === "notify"));
   assert(!calls.some((call) => call[1] === "log"));
