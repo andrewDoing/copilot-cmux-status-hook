@@ -13,6 +13,7 @@ import {
   readWorkspaceAicTotal,
   terminalLabelForOrdinal,
   terminalPreviewLabelForOrdinal,
+  workspaceLifecycleColor,
 } from "../lib/cmux-status.mjs";
 import { createSessionHooks, registerCmuxStatusEvents } from "../lib/copilot-events.mjs";
 import { normalizeContextUsage } from "../lib/status-formatters.mjs";
@@ -119,6 +120,7 @@ test("startup clears stale hook-owned status rows and progress before re-emittin
   assert(!calls.some((call) => callLine(call) === "cmux clear-status other-tool"));
   assert(calls.some((call) => callLine(call) === "cmux clear-progress"));
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
 });
 
 test("startup clear can be disabled", async (t) => {
@@ -131,6 +133,7 @@ test("startup clear can be disabled", async (t) => {
 
   assert(!calls.some((call) => call[1] === "list-status" || call[1] === "clear-status" || call[1] === "clear-progress"));
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
 });
 
 test("context usage writes one prioritized status per Copilot terminal surface and the CMUX progress bar", async (t) => {
@@ -151,13 +154,15 @@ test("context usage writes one prioritized status per Copilot terminal surface a
   });
 
   assert(first.calls.some((call) => callLine(call) === "cmux rename-tab --surface surface-a 🦊 Copilot"));
-  assert(first.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-a 🦊 Context 25% (68k/272k, 88 msgs) --icon 🟢 --priority 90"));
+  assert(first.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-a 🟢 🦊 Context 25% (68k/272k, 88 msgs) --priority 90"));
   assert(first.calls.some((call) => callLine(call) === "cmux set-progress 0.25"));
   assert(second.calls.some((call) => callLine(call) === "cmux rename-tab --surface surface-b 🐙 Copilot"));
-  assert(second.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-b 🐙 Context 75% (204k/272k, 120 msgs) --icon 🔴 --priority 90"));
+  assert(second.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-b 🔴 🐙 Context 75% (204k/272k, 120 msgs) --priority 90"));
   assert(second.calls.some((call) => callLine(call) === "cmux set-progress 0.75"));
   assert(!first.calls.some((call) => call[2] === "copilot-context-surface-b"));
   assert(!second.calls.some((call) => call[2] === "copilot-context-surface-a"));
+  assert(!first.calls.some((call) => call[1] === "set-status" && call[2] === "copilot-context-surface-a" && call.includes("--icon")));
+  assert(!second.calls.some((call) => call[1] === "set-status" && call[2] === "copilot-context-surface-b" && call.includes("--icon")));
 });
 
 test("terminal ordinals are stable within the workspace registry", async (t) => {
@@ -213,14 +218,33 @@ test("activity events update CMUX progress with emoji-only labels", async (t) =>
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.25 --label 🦊 Working: editing files"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.45 --label 🦊 Working: running tests"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.7 --label 🦊 Working: bash finished"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Working: running tests · Context 50% (50/100) --icon 🔴 --priority 90"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Context 50% (50/100) --icon 🔴 --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Amber"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🔴 🦊 Working: running tests · Context 50% (50/100) --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🔴 🦊 Context 50% (50/100) --priority 90"));
+});
+
+test("user input tools mark the workspace as waiting on the user", async (t) => {
+  const { calls, session, storeDir } = await createHarness();
+  t.after(() => rm(storeDir, { recursive: true, force: true }));
+
+  await session.emit("session.usage_info", { currentTokens: 25, tokenLimit: 100 });
+  await session.emit("tool.execution_start", { toolCallId: "tool-1", toolName: "ask_user", arguments: {} });
+
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🟢 🦊 Waiting on user: input needed · Context 25% (25/100) --priority 90"));
 });
 
 test("context status icon is green below 100k, yellow at 100k, and red at 50 percent", () => {
   assert.equal(contextIcon(normalizeContextUsage({ currentTokens: 99_999, tokenLimit: 300_000 })), "🟢");
   assert.equal(contextIcon(normalizeContextUsage({ currentTokens: 100_000, tokenLimit: 300_000 })), "🟡");
   assert.equal(contextIcon(normalizeContextUsage({ currentTokens: 150_000, tokenLimit: 300_000 })), "🔴");
+});
+
+test("workspace lifecycle colors map waiting, working, and done states", () => {
+  assert.equal(workspaceLifecycleColor("waiting"), "Red");
+  assert.equal(workspaceLifecycleColor("working"), "Amber");
+  assert.equal(workspaceLifecycleColor("done"), "Green");
 });
 
 test("session end clears only the terminal context status", async (t) => {
@@ -231,7 +255,10 @@ test("session end clears only the terminal context status", async (t) => {
   calls.length = 0;
   await hooks.onSessionEnd();
 
-  assert.deepEqual(calls, [["cmux", "clear-status", "copilot-context-surface-1"]]);
+  assert.deepEqual(calls, [
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
+    ["cmux", "clear-status", "copilot-context-surface-1"],
+  ]);
 });
 
 test("outside CMUX is inert", async (t) => {

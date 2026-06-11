@@ -67,14 +67,15 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
 
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
   assert(calls.some((call) => callLine(call) === "cmux rename-tab --surface surface-1 🦊 Copilot"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
+  assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Amber"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.05 --label 🦊 Working: reading prompt"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.15 --label 🦊 Working: thinking"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.45 --label 🦊 Working: running tests"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Context 25% (68k/272k, 88 msgs) --icon 🟢 --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🟢 🦊 Context 25% (68k/272k, 88 msgs) --priority 90"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.25"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🦊 Working: bash finished · Context 25% (68k/272k, 88 msgs) --icon 🟢 --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🟢 🦊 Working: bash finished · Context 25% (68k/272k, 88 msgs) --priority 90"));
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 1 --priority 100"));
-  assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(!calls.some((call) => call[1] === "notify"));
   assert(!calls.some((call) => call[1] === "log"));
   assert(!calls.some((call) => call[1] === "set-status" && String(call[2]).startsWith("copilot-") && !["copilot-aic", "copilot-context-surface-1"].includes(call[2])));
@@ -92,5 +93,8 @@ test("e2e shutdown clears context status and leaves workspace AIC total", async 
   calls.length = 0;
   await session.emit("session.shutdown", { shutdownType: "normal" });
 
-  assert.deepEqual(calls, [["cmux", "clear-status", "copilot-context-surface-1"]]);
+  assert.deepEqual(calls, [
+    ["cmux", "workspace-action", "--action", "set-color", "--color", "Green"],
+    ["cmux", "clear-status", "copilot-context-surface-1"],
+  ]);
 });

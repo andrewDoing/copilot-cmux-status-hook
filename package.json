@@ -5,8 +5,9 @@
   "type": "module",
   "main": "extension.mjs",
   "scripts": {
-    "lint": "node --check extension.mjs && find lib scripts test -name '*.mjs' -exec node --check {} \\;",
+    "lint": "node --check extension.mjs && find lib scripts test e2e -name '*.mjs' -exec node --check {} \\;",
     "test": "node --test",
+    "test:e2e:cmux": "node --test e2e/live-cmux.mjs",
     "check": "npm run lint && npm test",
     "install:extension": "node scripts/install.mjs",
     "uninstall:extension": "node scripts/uninstall.mjs"
