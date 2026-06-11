@@ -65,9 +65,9 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
   await session.emit("tool.execution_complete", { toolCallId: "tool-1", success: true });
   await session.emit("session.idle", { aborted: false });
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 0 --icon creditcard --color #4F46E5"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 Context: [#####---------------] 25% (68k/272k, 88 msgs) --icon chart.bar --color #196F3D"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 1 --icon creditcard --color #4F46E5"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 0 --icon creditcard --color #4F46E5 --priority 100"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 Context 25% (68k/272k, 88 msgs) --icon gauge --color #196F3D --priority 90"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 1 --icon creditcard --color #4F46E5 --priority 100"));
   assert(!calls.some((call) => call[1] === "set-progress"));
   assert(!calls.some((call) => call[1] === "workspace-action"));
   assert(!calls.some((call) => call[1] === "notify"));

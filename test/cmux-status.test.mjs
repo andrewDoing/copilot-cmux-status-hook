@@ -61,8 +61,8 @@ test("assistant usage writes a shared workspace AIC total status", async (t) => 
   await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1.25 });
   await session.emit("assistant.usage", { apiCallId: "usage-2", cost: 2 });
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 1.25 --icon creditcard --color #4F46E5"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 3.25 --icon creditcard --color #4F46E5"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 1.25 --icon creditcard --color #4F46E5 --priority 100"));
+  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic AIC used: 3.25 --icon creditcard --color #4F46E5 --priority 100"));
   assert(!calls.some((call) => call[1] === "workspace-action" || call[1] === "notify" || call[1] === "log"));
 });
 
@@ -92,7 +92,7 @@ test("workspace AIC totals aggregate records written by separate controllers", a
   assert.equal(content.trim().split("\n").length, 3);
 });
 
-test("context usage writes one progress-bar status per Copilot terminal surface", async (t) => {
+test("context usage writes one prioritized status per Copilot terminal surface", async (t) => {
   const first = await createHarness({ CMUX_SURFACE_ID: "surface-a" });
   const second = await createHarness({ CMUX_SURFACE_ID: "surface-b" });
   t.after(() => rm(first.storeDir, { recursive: true, force: true }));
@@ -109,8 +109,8 @@ test("context usage writes one progress-bar status per Copilot terminal surface"
     messagesLength: 120,
   });
 
-  assert(first.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-a Context: [#####---------------] 25% (68k/272k, 88 msgs) --icon chart.bar --color #196F3D"));
-  assert(second.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-b Context: [###############-----] 75% (204k/272k, 120 msgs) --icon chart.bar --color #B26A00"));
+  assert(first.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-a Context 25% (68k/272k, 88 msgs) --icon gauge --color #196F3D --priority 90"));
+  assert(second.calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-b Context 75% (204k/272k, 120 msgs) --icon gauge --color #B26A00 --priority 90"));
   assert(!first.calls.some((call) => call[2] === "copilot-context-surface-b"));
   assert(!second.calls.some((call) => call[2] === "copilot-context-surface-a"));
 });
@@ -140,8 +140,8 @@ test("outside CMUX is inert", async (t) => {
   assert.deepEqual(calls, []);
 });
 
-test("contextStatusValue renders a bounded ASCII progress bar", () => {
+test("contextStatusValue renders a compact native status label", () => {
   const usage = normalizeContextUsage({ currentTokens: 50, tokenLimit: 100 });
 
-  assert.equal(contextStatusValue(usage, 10), "Context: [#####-----] 50% (50/100)");
+  assert.equal(contextStatusValue(usage), "Context 50% (50/100)");
 });
