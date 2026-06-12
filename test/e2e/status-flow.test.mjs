@@ -48,7 +48,7 @@ function callLine(call) {
   return call.join(" ");
 }
 
-test("e2e event flow shows only AIC total and terminal context progress", async (t) => {
+test("e2e event flow shows terminal context progress and workspace lifecycle color", async (t) => {
   const { calls, hooks, session, storeDir } = await createHarness();
   t.after(() => rm(storeDir, { recursive: true, force: true }));
 
@@ -61,11 +61,9 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
     tokenLimit: 272_000,
     messagesLength: 88,
   });
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1 });
   await session.emit("tool.execution_complete", { toolCallId: "tool-1", success: true });
   await session.emit("session.idle", { aborted: false });
 
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
   assert(calls.some((call) => callLine(call) === "cmux rename-tab --surface surface-1 🦊 Copilot"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Amber"));
@@ -75,13 +73,12 @@ test("e2e event flow shows only AIC total and terminal context progress", async 
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🟢 🦊 Context 25% (68k/272k, 88 msgs) --priority 90"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.25"));
   assert(calls.some((call) => callLine(call) === "cmux set-status copilot-context-surface-1 🟢 🦊 Working: bash finished · Context 25% (68k/272k, 88 msgs) --priority 90"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 1 --priority 100"));
   assert(!calls.some((call) => call[1] === "notify"));
   assert(!calls.some((call) => call[1] === "log"));
-  assert(!calls.some((call) => call[1] === "set-status" && String(call[2]).startsWith("copilot-") && !["copilot-aic", "copilot-context-surface-1"].includes(call[2])));
+  assert(!calls.some((call) => call[1] === "set-status" && String(call[2]).startsWith("copilot-") && call[2] !== "copilot-context-surface-1"));
 });
 
-test("e2e shutdown clears context status and leaves workspace AIC total", async (t) => {
+test("e2e shutdown clears context status", async (t) => {
   const { calls, session, storeDir } = await createHarness();
   t.after(() => rm(storeDir, { recursive: true, force: true }));
 
@@ -89,7 +86,6 @@ test("e2e shutdown clears context status and leaves workspace AIC total", async 
     currentTokens: 50,
     tokenLimit: 100,
   });
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 2 });
   calls.length = 0;
   await session.emit("session.shutdown", { shutdownType: "normal" });
 

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "/absolute/path/to/copilot-cmux-status-hook/hooks/imessage-agent-stop.sh",
+        "timeoutSec": 15,
+        "env": {
+          "COPILOT_IMESSAGE_RECIPIENT": "REPLACE_WITH_PHONE_OR_APPLE_ID"
+        }
+      }
+    ]
+  }
+}

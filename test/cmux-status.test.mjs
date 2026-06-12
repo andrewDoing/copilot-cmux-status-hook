@@ -1,16 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  appendWorkspaceUsage,
   assignTerminalOrdinal,
   contextIcon,
   contextStatusValue,
   createCmuxStatusController,
   readTerminalOrdinals,
-  readWorkspaceAicTotal,
   terminalLabelForOrdinal,
   terminalPreviewLabelForOrdinal,
   workspaceLifecycleColor,
@@ -64,45 +62,7 @@ function callLine(call) {
   return call.join(" ");
 }
 
-test("assistant usage writes a shared workspace AIC total status", async (t) => {
-  const { calls, session, storeDir } = await createHarness();
-  t.after(() => rm(storeDir, { recursive: true, force: true }));
-
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1.25 });
-  await session.emit("assistant.usage", { apiCallId: "usage-2", cost: 2 });
-
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 1.25 --priority 100"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 3.25 --priority 100"));
-  assert(!calls.some((call) => call[1] === "workspace-action" || call[1] === "notify" || call[1] === "log"));
-});
-
-test("duplicate usage call ids do not double count AIC", async (t) => {
-  const { calls, session, storeDir } = await createHarness();
-  t.after(() => rm(storeDir, { recursive: true, force: true }));
-
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1.25 });
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1.25 });
-
-  const aicCalls = calls.filter((call) => call[1] === "set-status" && call[2] === "copilot-aic");
-  assert.equal(aicCalls.length, 1);
-  assert.equal(aicCalls[0][3], "💳 AIC used: 1.25");
-});
-
-test("workspace AIC totals aggregate records written by separate controllers", async (t) => {
-  const storeDir = await mkdtemp(join(tmpdir(), "cmux-status-test-"));
-  t.after(() => rm(storeDir, { recursive: true, force: true }));
-
-  const sharedFile = join(storeDir, "usage.jsonl");
-  await appendWorkspaceUsage(sharedFile, { callId: "a", cost: 1 });
-  await appendWorkspaceUsage(sharedFile, { callId: "b", cost: 2.5 });
-  await appendWorkspaceUsage(sharedFile, { callId: "a", cost: 1 });
-
-  assert.equal(await readWorkspaceAicTotal(sharedFile), 3.5);
-  const content = await readFile(sharedFile, "utf8");
-  assert.equal(content.trim().split("\n").length, 3);
-});
-
-test("startup clears stale hook-owned status rows and progress before re-emitting AIC", async (t) => {
+test("startup clears stale hook-owned status rows and progress", async (t) => {
   const { calls, controller, storeDir } = await createHarness({}, {
     listStatus: [
       "copilot-aic=💳 AIC used: 99 priority=100",
@@ -119,7 +79,7 @@ test("startup clears stale hook-owned status rows and progress before re-emittin
   assert(calls.some((call) => callLine(call) === "cmux clear-status copilot-context-old"));
   assert(!calls.some((call) => callLine(call) === "cmux clear-status other-tool"));
   assert(calls.some((call) => callLine(call) === "cmux clear-progress"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
+  assert(!calls.some((call) => call[1] === "set-status" && call[2] === "copilot-aic"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
 });
 
@@ -132,7 +92,7 @@ test("startup clear can be disabled", async (t) => {
   await controller.startupReady();
 
   assert(!calls.some((call) => call[1] === "list-status" || call[1] === "clear-status" || call[1] === "clear-progress"));
-  assert(calls.some((call) => callLine(call) === "cmux set-status copilot-aic 💳 AIC used: 0 --priority 100"));
+  assert(!calls.some((call) => call[1] === "set-status" && call[2] === "copilot-aic"));
   assert(calls.some((call) => callLine(call) === "cmux workspace-action --action set-color --color Red"));
 });
 
@@ -269,7 +229,6 @@ test("outside CMUX is inert", async (t) => {
 
   await hooks.onSessionStart();
   await session.emit("session.usage_info", { currentTokens: 10, tokenLimit: 100 });
-  await session.emit("assistant.usage", { apiCallId: "usage-1", cost: 1 });
   await hooks.onSessionEnd();
 
   assert.deepEqual(calls, []);

@@ -95,7 +95,6 @@ function callLine(call) {
 
 test("live CMUX event flow writes disposable status rows and clears context on shutdown", liveCmuxOptions, async (t) => {
   const suffix = `e2e-${process.pid}-${Date.now()}`;
-  const aicKey = `copilot-aic-${suffix}`;
   const contextKey = `copilot-context-${suffix}`;
   const storeDir = await mkdtemp(join(tmpdir(), "cmux-status-live-"));
   const calls = [];
@@ -103,7 +102,6 @@ test("live CMUX event flow writes disposable status rows and clears context on s
   const originalWorkspaceColor = sidebarColor(await sidebarState());
 
   t.after(async () => {
-    await safeCmux(["clear-status", aicKey]);
     await safeCmux(["clear-status", contextKey]);
     await safeCmux(["clear-progress"]);
     await restoreWorkspaceColor(originalWorkspaceColor);
@@ -113,11 +111,10 @@ test("live CMUX event flow writes disposable status rows and clears context on s
   const controller = createCmuxStatusController({
     env: {
       ...process.env,
-      CMUX_COPILOT_AIC_STATUS_KEY: aicKey,
       CMUX_COPILOT_CONTEXT_STATUS_KEY: contextKey,
       CMUX_COPILOT_CLEAR_ON_START: "0",
       CMUX_COPILOT_LABEL_TERMINAL: "0",
-      CMUX_COPILOT_AIC_STORE_DIR: storeDir,
+      CMUX_COPILOT_STORE_DIR: storeDir,
     },
     onError: (message) => errors.push(message),
     run: async (command, args) => {
@@ -142,16 +139,10 @@ test("live CMUX event flow writes disposable status rows and clears context on s
     tokenLimit: 272_000,
     messagesLength: 88,
   });
-  await session.emit("assistant.usage", { apiCallId: `${suffix}-usage-1`, cost: 1.25 });
-  await session.emit("assistant.usage", { apiCallId: `${suffix}-usage-1`, cost: 1.25 });
   await session.emit("tool.execution_complete", { toolCallId: "tool-1", success: true });
   await session.emit("session.idle", { aborted: false });
 
   assert.deepEqual(errors, []);
-  assert.equal(
-    await waitForStatusLine(aicKey, (line) => line === `${aicKey}=💳 AIC used: 1.25 priority=100`),
-    `${aicKey}=💳 AIC used: 1.25 priority=100`,
-  );
   assert.equal(
     await waitForStatusLine(
       contextKey,
@@ -160,10 +151,6 @@ test("live CMUX event flow writes disposable status rows and clears context on s
     `${contextKey}=🟢 🦊 Context 25% (68k/272k, 88 msgs) priority=90`,
   );
 
-  const finalAicUpdates = calls.filter(
-    (call) => callLine(call) === `cmux set-status ${aicKey} 💳 AIC used: 1.25 --priority 100`,
-  );
-  assert.equal(finalAicUpdates.length, 1);
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.05 --label 🦊 Working: reading prompt"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.15 --label 🦊 Working: thinking"));
   assert(calls.some((call) => callLine(call) === "cmux set-progress 0.45 --label 🦊 Working: running tests"));
@@ -179,7 +166,7 @@ test("live CMUX event flow writes disposable status rows and clears context on s
       (call) =>
         call[1] === "set-status" &&
         String(call[2]).startsWith("copilot-") &&
-        ![aicKey, contextKey].includes(call[2]),
+        call[2] !== contextKey,
     ),
   );
 
@@ -192,6 +179,5 @@ test("live CMUX event flow writes disposable status rows and clears context on s
 
   const statusAfterShutdown = await listStatus();
   assert.equal(statusLine(statusAfterShutdown, contextKey), undefined);
-  assert.equal(statusLine(statusAfterShutdown, aicKey), `${aicKey}=💳 AIC used: 1.25 priority=100`);
   assert(isGreenSidebarColor(sidebarColor(await sidebarState())));
 });
